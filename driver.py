@@ -15,7 +15,7 @@ from chia.wallet.puzzles.p2_delegated_puzzle_or_hidden_puzzle import (  # standa
     calculate_synthetic_secret_key,
     DEFAULT_HIDDEN_PUZZLE_HASH,
 )
-
+from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.wallet.derive_keys import master_sk_to_wallet_sk
 from chia.types.coin_spend import CoinSpend
 from chia.wallet.sign_coin_spends import sign_coin_spends
@@ -23,7 +23,7 @@ from chia.wallet.lineage_proof import LineageProof
 from chia.wallet.puzzles import singleton_top_layer
 from chia.types.announcement import Announcement
 
-from CreatorNFT.sim import load_clsp_relative
+from sim import load_clsp_relative
 
 SINGLETON_MOD = load_clvm("singleton_top_layer.clvm")
 SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
@@ -153,7 +153,6 @@ def make_buy_spend(nft_coin, new_state, payment_coin, payment_coin_puzzle, launc
         (SINGLETON_MOD_HASH, (launcher_coin.name(), LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
     )
     assert current_singleton_puzzle.get_tree_hash() == nft_coin.puzzle_hash
-    #    state, royalty = uncurry_state_and_royalty(last_spend.puzzle_reveal.to_program())
     assert current_state[0] == int_to_bytes(100)
     price = int_from_bytes(current_state[1])
 
