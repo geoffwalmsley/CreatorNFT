@@ -193,10 +193,22 @@ class NFTManager:
                 return await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
             else:
                 print("waiting")
-                await asyncio.sleep(5)
+                await asyncio.sleep(30)
 
     async def get_my_nfts(self):
-        return await self.nft_wallet.get_nfts()
+        return await self.nft_wallet.get_nfts(self.nft_pk)
+
+    async def update_nft(self, nft: NFT, new_state: List):
+        update_spend = driver.make_update_spend(nft, new_state)
+        sb = await sign_coin_spends([update_spend],
+                                    self.pk_to_sk,
+                                    self.AGG_SIG_ME_DATA,
+                                    DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,)
+        res = await self.node_client.push_tx(sb)
+        if res['success']:
+            print("txn added to mempool")
+            tx_id = await self.get_tx_from_mempool(sb.name())
+            return tx_id
         
 
 async def main():
@@ -216,10 +228,17 @@ async def main():
     # nft = await manager.wait_for_confirmation(tx_id, launcher_id)
 
     # List stored NFTs
-    # nfts = await manager.get_my_nfts()
-    await manager.nft_wallet.update_to_current_block()
+    nfts = await manager.get_my_nfts()
+        
+    #await manager.nft_wallet.update_to_current_block()
     
     # State update spend
+    my_nft = await manager.nft_wallet.get_nft_by_launcher_id(nfts[0])
+    print(my_nft.state()[:1])
+    new_state = [12720, 1000, puzzle_for_pk(manager.nft_pk).get_tree_hash(), manager.nft_pk]
+    tx_id = await manager.update_nft(my_nft, new_state)
+    nft = await manager.wait_for_confirmation(tx_id, my_nft.launcher_id)
+    print(nft.state())
 
     # Purchase spend (needs second wallet)
 

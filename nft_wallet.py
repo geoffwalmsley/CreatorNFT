@@ -33,6 +33,9 @@ class NFT(Coin):
             return conditions_dict_for_solution(self.last_spend.puzzle_reveal.to_program(),
                                                 self.last_spend.solution.to_program())
 
+    def as_coin(self):
+        return Coin(self.parent_coin_info, self.puzzle_hash, self.amount)
+
     def state(self):
         mod, args = self.last_spend.solution.to_program().uncurry()
         return mod.as_python()[-1][0]
@@ -286,11 +289,12 @@ class NFTWallet:
         
 
     async def get_nfts(self, pk: G1Element = None):
+        
         if pk:
-            query = f"SELECT launcher_id FROM nft_coins WHERE pk={pk.hex()}"
+            query = f"SELECT launcher_id FROM nft_coins WHERE owner_pk = ?"
         else:
             query = "SELECT launcher_id FROM nft_coins"
-        cursor = await self.db_connection.execute(query)
+        cursor = await self.db_connection.execute(query, (bytes(pk),))
         rows = await cursor.fetchall()
         await cursor.close()
         return list(map(lambda x : x[0], rows))
