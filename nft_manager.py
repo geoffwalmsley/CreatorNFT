@@ -35,6 +35,7 @@ from chia.rpc.full_node_rpc_client import FullNodeRpcClient
 from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.util.config import load_config
 from chia.util.ints import uint16, uint64
+from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 
 
 from sim import load_clsp_relative
@@ -121,6 +122,7 @@ class NFTManager:
         synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
         self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
         self.key_dict[bytes(_sk.get_g1())] = _sk
+        self.wallet_sk = _sk
 
 
     async def derive_unhardened_keys(self, n=10, index=0):
@@ -130,19 +132,24 @@ class NFTManager:
         for i in range(n):
             _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, index)
             synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
-            self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
+            self.key_dict[bytes(_sk.get_g1())] = _sk
 
     async def pk_to_sk(self, pk):
         return self.key_dict.get(bytes(pk))
 
 
     async def choose_std_coin(self, amount):
+        addr = await self.wallet_client.get_next_address(1, False)
+        ph = decode_puzzle_hash(addr)
+        crs = await self.node_client.get_coin_records_by_puzzle_hash(ph, include_spent_coins=False)
         # keep amount low so we don't have to bother combining coins.
         if amount > 1e10:
             raise ValueError("Amount too high, choose a lower amount")
 
         for k in self.key_dict.keys():
             puzzle = puzzle_for_pk(k)
+            if puzzle.get_tree_hash == ph:
+                print("FOUND PUZHASH")
             my_coins = await self.node_client.get_coin_records_by_puzzle_hash(puzzle.get_tree_hash())
             if my_coins:
                 coin_record = next(cr for cr in my_coins if (cr.coin.amount >= amount) and (not cr.spent))
@@ -222,23 +229,30 @@ async def main():
     manager = NFTManager()
     await manager.connect()
 
+
+
+    b = await manager.wallet_client.get_wallet_balance(1)
+    print(b)
+    c = await manager.choose_std_coin(101)
+    print(c)
+    
     # Launch a new NFT
     # tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
     # print(f"\nSubmitted tx: {tx_id}")
     # nft = await manager.wait_for_confirmation(tx_id, launcher_id)
 
     # List stored NFTs
-    nfts = await manager.get_my_nfts()
+    # nfts = await manager.get_my_nfts()
         
     #await manager.nft_wallet.update_to_current_block()
     
     # State update spend
-    my_nft = await manager.nft_wallet.get_nft_by_launcher_id(nfts[0])
-    print(my_nft.state()[:1])
-    new_state = [12720, 1000, puzzle_for_pk(manager.nft_pk).get_tree_hash(), manager.nft_pk]
-    tx_id = await manager.update_nft(my_nft, new_state)
-    nft = await manager.wait_for_confirmation(tx_id, my_nft.launcher_id)
-    print(nft.state())
+    # my_nft = await manager.nft_wallet.get_nft_by_launcher_id(nfts[0])
+    # print(my_nft.state()[:1])
+    # new_state = [12720, 1000, puzzle_for_pk(manager.nft_pk).get_tree_hash(), manager.nft_pk]
+    # tx_id = await manager.update_nft(my_nft, new_state)
+    # nft = await manager.wait_for_confirmation(tx_id, my_nft.launcher_id)
+    # print(nft.state())
 
     # Purchase spend (needs second wallet)
 
