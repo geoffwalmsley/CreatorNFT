@@ -133,6 +133,7 @@ class NFTManager:
             _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, index)
             synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
             self.key_dict[bytes(_sk.get_g1())] = _sk
+            self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
 
     async def pk_to_sk(self, pk):
         return self.key_dict.get(bytes(pk))
@@ -148,8 +149,6 @@ class NFTManager:
 
         for k in self.key_dict.keys():
             puzzle = puzzle_for_pk(k)
-            if puzzle.get_tree_hash == ph:
-                print("FOUND PUZHASH")
             my_coins = await self.node_client.get_coin_records_by_puzzle_hash(puzzle.get_tree_hash())
             if my_coins:
                 coin_record = next(cr for cr in my_coins if (cr.coin.amount >= amount) and (not cr.spent))
@@ -229,17 +228,13 @@ async def main():
     manager = NFTManager()
     await manager.connect()
 
+    # await manager.derive_unhardened_keys()
+    # c = await manager.choose_std_coin(101)
 
-
-    b = await manager.wallet_client.get_wallet_balance(1)
-    print(b)
-    c = await manager.choose_std_coin(101)
-    print(c)
-    
     # Launch a new NFT
-    # tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
-    # print(f"\nSubmitted tx: {tx_id}")
-    # nft = await manager.wait_for_confirmation(tx_id, launcher_id)
+    tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
+    print(f"\nSubmitted tx: {tx_id}")
+    nft = await manager.wait_for_confirmation(tx_id, launcher_id)
 
     # List stored NFTs
     # nfts = await manager.get_my_nfts()
