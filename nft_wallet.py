@@ -252,7 +252,9 @@ class NFTWallet:
                 mod, _ = inner_puzzle.uncurry()
                 if mod.get_tree_hash() == INNER_MOD.get_tree_hash():
                     print("Found a CreatorNFT")
-                    await self.save_launcher(cr.coin.name())
+                    mod, _ = eve_spend.solution.to_program().uncurry()
+                    state = mod.as_python()[-1][0]
+                    await self.save_launcher(cr.coin.name(), state[-1])
 
                 
 
@@ -289,12 +291,13 @@ class NFTWallet:
         
 
     async def get_nfts(self, pk: G1Element = None):
-        
         if pk:
             query = f"SELECT launcher_id FROM nft_coins WHERE owner_pk = ?"
+            cursor = await self.db_connection.execute(query, (bytes(pk),))
         else:
             query = "SELECT launcher_id FROM nft_coins"
-        cursor = await self.db_connection.execute(query, (bytes(pk),))
+            cursor = await self.db_connection.execute(query)
+        
         rows = await cursor.fetchall()
         await cursor.close()
         return list(map(lambda x : x[0], rows))

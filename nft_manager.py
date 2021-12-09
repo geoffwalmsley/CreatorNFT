@@ -215,27 +215,47 @@ class NFTManager:
             print("txn added to mempool")
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
+
+    async def get_for_sale_nfts(self):
+        launcher_ids = await self.nft_wallet.get_nfts()
+        for_sale_nfts = []
+        for launcher_id in launcher_ids[:10]:
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
+            if int_from_bytes(nft.state()[0]) == 100:
+                if not self.is_my_nft(nft):
+                    for_sale_nfts.append(nft)
+        return for_sale_nfts
+
+
+    async def is_my_nft(self, nft):
+        if nft.owner_pk == bytes(self.nft_pk):
+            return True
+
+        
         
 
 async def main():
     # DATA
     amount = 101
     nft_data = ("NFT TEST", "Hash Data")
-    launch_state = [100, 1000] # append ph and pk later
+    launch_state = [90, 1000] # append ph and pk later
     royalty = [10]
 
     
     manager = NFTManager()
     await manager.connect()
 
+    # Update to current block
+    # await manager.nft_wallet.update_to_current_block()
+
     # await manager.derive_unhardened_keys()
     # c = await manager.choose_std_coin(101)
 
     # Launch a new NFT
-    tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
-    print(f"\nSubmitted tx: {tx_id}")
-    nft = await manager.wait_for_confirmation(tx_id, launcher_id)
-
+    # tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
+    # print(f"\nSubmitted tx: {tx_id}")
+    # nft = await manager.wait_for_confirmation(tx_id, launcher_id)
+    # await manager.nft_wallet.update_to_current_block()
     # List stored NFTs
     # nfts = await manager.get_my_nfts()
         
@@ -249,6 +269,9 @@ async def main():
     # nft = await manager.wait_for_confirmation(tx_id, my_nft.launcher_id)
     # print(nft.state())
 
+    # Find for sale nfts
+    n = await manager.get_for_sale_nfts()
+    print(n)
     # Purchase spend (needs second wallet)
 
     
