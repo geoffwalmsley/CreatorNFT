@@ -142,10 +142,7 @@ class NFTManager:
 
 
     async def choose_std_coin(self, amount):
-        # addr = await self.wallet_client.get_next_address(1, False)
-        # ph = decode_puzzle_hash(addr)
-        # crs = await self.node_client.get_coin_records_by_puzzle_hash(ph, include_spent_coins=False)
-        # keep amount low so we don't have to bother combining coins.
+        # TODO: setup a puzzle store to match keys and puzzles sensibly
         if amount > 1e10:
             raise ValueError("Amount too high, choose a lower amount")
 
@@ -215,6 +212,14 @@ class NFTManager:
 
     async def update_nft(self, nft: NFT, new_state: List):
         update_spend = driver.make_update_spend(nft, new_state)
+        conds = driver.run_singleton(update_spend.puzzle_reveal.to_program(), update_spend.solution.to_program())
+        target_pk = conds[-1][1]
+        print(nft.launcher_id.hex())
+        print(target_pk)
+        print(self.nft_pk)
+        print(puzzle_for_pk(self.nft_pk).get_tree_hash())
+        # return None
+        
         sb = await sign_coin_spends([update_spend],
                                     self.pk_to_sk,
                                     self.AGG_SIG_ME_DATA,
@@ -257,7 +262,21 @@ class NFTManager:
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
 
-        
+
+
+    async def print_nfts(self, launcher_ids: List[bytes]):
+        for launcher_id in launcher_ids:
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
+            print("\n")
+            print("-"*50)
+            print(f"Details for NFT:\n{nft.launcher_id.hex()}\n")
+            print(f"Price: {nft.price()}")
+            print(f"Royalty: {nft.royalty_pc()}%\n")
+            print(f"Data:  {nft.data}")
+            print("-"*50)
+            print("\n")
+
+
         
 async def main(func):
     # DATA
@@ -282,23 +301,29 @@ async def main(func):
     # List stored NFTs
     if func == "list":
         await manager.nft_wallet.update_to_current_block()
-        nfts = await manager.get_my_nfts()
-        print(nfts[:5])    
+        lids = await manager.get_my_nfts()
+        await manager.print_nfts(lids[:5])    
     
     # State update
-    # my_nft = await manager.nft_wallet.get_nft_by_launcher_id(nfts[-1])
-    # new_state = [12720, 1000, puzzle_for_pk(manager.nft_pk).get_tree_hash(), manager.nft_pk]
-    # tx_id = await manager.update_nft(my_nft, new_state)
-    # nft = await manager.wait_for_confirmation(tx_id, my_nft.launcher_id)
-    # print(nft.state())
+    if func == "update":
+        my_nfts = await manager.get_my_nfts()
+        my_nft = await manager.nft_wallet.get_nft_by_launcher_id(my_nfts[-1])
+        new_state = [100, 3400, puzzle_for_pk(manager.nft_pk).get_tree_hash(), manager.nft_pk]
+        tx_id = await manager.update_nft(my_nft, new_state)
+        nft = await manager.wait_for_confirmation(tx_id, my_nft.launcher_id)
+        print(nft.state())
 
     # Find for sale nfts
     if func == "sale":
         print("finding for sale")
         nfts_for_sale = await manager.get_for_sale_nfts()
-        if nfts_for_sale:
-            nft = nfts_for_sale[-1]
-            print(nft)
+        for nft in nfts_for_sale:
+            print("-"*50)
+            print(f"Details for NFT:\n{nft.launcher_id}")
+            print(f"Price: {nft.price()}")
+            print(f"Royalty: {nft.royalty()}")
+            print(f"Data:  {nft.data}")
+            print("-*50")
 
     # Purchase spend (needs second wallet)
     if func == "buy":
@@ -307,6 +332,21 @@ async def main(func):
             nft = nfts_for_sale[-1]
             tx_id = await manager.buy_nft(nft)
             print(f"\n Submitted tx: {tx_id}")
+
+    if func == "test":
+        nfts = await manager.nft_wallet.get_nfts()
+        launcher_id = nfts[0]
+        nft = await manager.nft_wallet.get_nft_by_launcher_id(launcher_id)
+        print(nft.data)
+        # coin_rec = await manager.node_client.get_coin_records_by_parent_ids([launcher_id])
+        # coin_rec = await manager.node_client.get_coin_record_by_name(launcher_id)
+        
+        # spend = await manager.node_client.get_puzzle_and_solution(coin_rec.coin.name(),
+        #                                                           coin_rec.spent_block_index)
+
+        # data = spend.solution.to_program().uncurry()[0].as_python()[-1]
+        # print(data)
+        
     
 
     await manager.close()

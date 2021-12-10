@@ -14,6 +14,7 @@ from clvm.casts import int_to_bytes, int_from_bytes
 from sim import load_clsp_relative
 
 
+
 log = logging.getLogger(__name__)
 SINGLETON_MOD = load_clvm("singleton_top_layer.clvm")
 SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
@@ -25,10 +26,12 @@ P2_MOD = load_clsp_relative("clsp/p2_singleton_payer.clsp")
 
 class NFT(Coin):
     
-    def __init__(self, launcher_id: bytes32, coin: Coin, last_spend: CoinSpend = None):
+    def __init__(self, launcher_id: bytes32, coin: Coin, last_spend: CoinSpend = None, nft_data = None, royalty = None):
         super().__init__(coin.parent_coin_info, coin.puzzle_hash, coin.amount)
         self.launcher_id = launcher_id
         self.last_spend = last_spend
+        self.data = nft_data
+        self.royalty = royalty
 
     def conditions(self):
         if self.last_spend:
@@ -42,10 +45,13 @@ class NFT(Coin):
         mod, args = self.last_spend.solution.to_program().uncurry()
         return mod.as_python()[-1][0]
 
-    def royalty(self):
-        mod, args = self.last_spend.solution.to_program().uncurry()
-        return mod.as_python()[0]
+    # def royalty(self):
+    #     mod, args = self.last_spend.solution.to_program().uncurry()
+    #     return mod.as_python()[0]
 
+    def royalty_pc(self):
+        return int_from_bytes(self.royalty[1])
+    
     def owner_pk(self):
         return self.state()[-1]
 
@@ -259,6 +265,13 @@ class NFTWallet:
                 
 
     async def get_nft_by_launcher_id(self, launcher_id: bytes32):
+        l_coin_rec = await self.node_client.get_coin_record_by_name(launcher_id)
+        
+        spend = await self.node_client.get_puzzle_and_solution(l_coin_rec.coin.name(),
+                                                                  l_coin_rec.spent_block_index)
+
+        nft_data = spend.solution.to_program().uncurry()[0].as_python()[-1]
+        
         coin_rec = await self.node_client.get_coin_records_by_parent_ids([launcher_id])
         while True:
             if coin_rec[0].spent:
@@ -274,8 +287,13 @@ class NFTWallet:
         last_spend = await self.node_client.get_puzzle_and_solution(current_rec.coin.parent_coin_info,
                                                                     current_rec.confirmed_block_index)
         
-        
-        return NFT(launcher_id, coin_rec[0].coin, last_spend)
+        # old_state, royalty = driver.uncurry_state_and_royalty(last_spend.puzzle_reveal.to_program())
+        _, args = last_spend.puzzle_reveal.to_program().uncurry()
+        _, inner_puzzle = list(args.as_iter())
+        _, inner_args = inner_puzzle.uncurry()
+        # state = inner_args.rest().first().as_python()
+        royalty = inner_args.rest().rest().first().as_python()
+        return NFT(launcher_id, coin_rec[0].coin, last_spend, nft_data, royalty)
 
     async def save_launcher(self, launcher_id, pk=b""):
         cursor = await self.db_connection.execute("INSERT OR REPLACE INTO nft_coins (launcher_id, owner_pk) VALUES (?, ?)", (bytes(launcher_id), bytes(pk)))

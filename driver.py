@@ -250,15 +250,29 @@ def make_update_spend_old(nft_coin, launcher_coin, new_state, last_spend):
     return CoinSpend(nft_coin, current_singleton_puzzle, singleton_solution)
 
 def make_update_spend(nft: NFT, new_state):
+    # old_state, royalty = uncurry_state_and_royalty(nft.last_spend.puzzle_reveal.to_program())
+    # print(len(royalty))
+    # print(len(nft.royalty()))
+    # current_state = uncurry_solution(nft.last_spend.solution.to_program())
+    # # print(current_state)
+    # # print(nft.state())
+    # args = [INNER_MOD.get_tree_hash(), current_state, royalty]
+    # current_inner_puzzle = INNER_MOD.curry(*args)
+    # current_singleton_puzzle = SINGLETON_MOD.curry(
+    #     (SINGLETON_MOD_HASH, (nft.launcher_id, LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
+    # )
+
     old_state, royalty = uncurry_state_and_royalty(nft.last_spend.puzzle_reveal.to_program())
     current_state = uncurry_solution(nft.last_spend.solution.to_program())
-    args = [INNER_MOD.get_tree_hash(), nft.state(), nft.royalty()]
+    args = [INNER_MOD.get_tree_hash(), current_state, royalty]
+
+
     current_inner_puzzle = INNER_MOD.curry(*args)
     current_singleton_puzzle = SINGLETON_MOD.curry(
         (SINGLETON_MOD_HASH, (nft.launcher_id, LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
     )
 
-    assert current_singleton_puzzle.get_tree_hash() == nft.as_coin().puzzle_hash
+    assert current_singleton_puzzle.get_tree_hash() == nft.puzzle_hash
 
     lineage_proof = singleton_top_layer.lineage_proof_for_coinsol(nft.last_spend)
     inner_solution = [new_state, []]
