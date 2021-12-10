@@ -208,8 +208,8 @@ def make_buy_spend(nft: NFT, new_state, payment_coin, payment_coin_puzzle):
     inner_solution = [new_state, p2_coin.name()]
     singleton_solution = singleton_top_layer.solution_for_singleton(lineage_proof, nft.amount, inner_solution)
 
-    conds = run_singleton(current_singleton_puzzle, singleton_solution)
-    print(conds)
+    # conds = run_singleton(current_singleton_puzzle, singleton_solution)
+    # print(conds)
 
     p2_solution = Program.to([current_inner_puzzle.get_tree_hash(), p2_coin.name(), new_state])
     delegated_cond = [
