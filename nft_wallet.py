@@ -49,6 +49,10 @@ class NFT(Coin):
     #     mod, args = self.last_spend.solution.to_program().uncurry()
     #     return mod.as_python()[0]
 
+    def is_for_sale(self):
+        if int_from_bytes(self.state()[0]) == 100:
+            return True
+
     def royalty_pc(self):
         return int_from_bytes(self.royalty[1])
     
@@ -230,7 +234,7 @@ class NFTWallet:
             current_block -= 1
 
         singletons = await self.node_client.get_coin_records_by_puzzle_hash(LAUNCHER_PUZZLE_HASH, start_height=current_block, end_height=new_height)
-        print(len(singletons))
+        print(f"Updating {len(singletons)} Singletons")
         await self.filter_singletons(singletons)
 
         while new_height > current_block:
@@ -258,6 +262,7 @@ class NFTWallet:
                 _, inner_puzzle = list(args.as_iter())
                 mod, _ = inner_puzzle.uncurry()
                 if mod.get_tree_hash() == INNER_MOD.get_tree_hash():
+                    print("Found CreatorNFT")
                     mod, _ = eve_spend.solution.to_program().uncurry()
                     state = mod.as_python()[-1][0]
                     await self.save_launcher(cr.coin.name(), state[-1])
@@ -296,6 +301,7 @@ class NFTWallet:
         return NFT(launcher_id, coin_rec[0].coin, last_spend, nft_data, royalty)
 
     async def save_launcher(self, launcher_id, pk=b""):
+        print(f"Saving: {pk}")
         cursor = await self.db_connection.execute("INSERT OR REPLACE INTO nft_coins (launcher_id, owner_pk) VALUES (?, ?)", (bytes(launcher_id), bytes(pk)))
         await cursor.close()
         await self.db_connection.commit()
@@ -306,6 +312,13 @@ class NFTWallet:
         cursor = await self.db_connection.execute("INSERT OR REPLACE INTO nft_coins (launcher_id, owner_pk) VALUES (?,?)", (bytes(nft.launcher_id), bytes(nft.owner_pk())))
         await cursor.close()
         await self.db_connection.commit()
+
+    async def get_all_nfts(self):
+        query = "SELECT launcher_id FROM nft_coins"
+        cursor = await self.db_connection.execute(query)
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return rows
         
 
     async def get_nfts(self, pk: G1Element = None):

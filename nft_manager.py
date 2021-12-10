@@ -233,13 +233,16 @@ class NFTManager:
         return my_nfts
 
     async def get_for_sale_nfts(self):
-        launcher_ids = await self.nft_wallet.get_nfts()
+        await self.nft_wallet.update_to_current_block()
+        launcher_ids = await self.nft_wallet.get_all_nfts()
         for_sale_nfts = []
         for launcher_id in launcher_ids[:10]:
-            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
-            if int_from_bytes(nft.state()[0]) == 100:
-                if not await self.is_my_nft(nft):
-                    for_sale_nfts.append(nft)
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id[0])
+            print(int_from_bytes(nft.state()[0]))
+            if nft.is_for_sale():
+                print("for sale")
+                # if not await self.is_my_nft(nft):
+                for_sale_nfts.append(nft)
         return for_sale_nfts
 
 
@@ -334,18 +337,10 @@ async def main(func):
             print(f"\n Submitted tx: {tx_id}")
 
     if func == "test":
-        nfts = await manager.nft_wallet.get_nfts()
-        launcher_id = nfts[0]
-        nft = await manager.nft_wallet.get_nft_by_launcher_id(launcher_id)
-        print(nft.data)
-        # coin_rec = await manager.node_client.get_coin_records_by_parent_ids([launcher_id])
-        # coin_rec = await manager.node_client.get_coin_record_by_name(launcher_id)
-        
-        # spend = await manager.node_client.get_puzzle_and_solution(coin_rec.coin.name(),
-        #                                                           coin_rec.spent_block_index)
-
-        # data = spend.solution.to_program().uncurry()[0].as_python()[-1]
-        # print(data)
+        # nfts = await manager.get_for_sale_nfts()
+        nfts = await manager.nft_wallet.get_all_nfts()
+        for nft in nfts:
+            print(nft)
         
     
 

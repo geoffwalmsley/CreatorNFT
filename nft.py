@@ -56,9 +56,10 @@ async def sale_cmd(ctx) -> None:
     manager = NFTManager()
     await manager.connect()
     nfts = await manager.get_for_sale_nfts()
-    await manager.close()
     for nft in nfts:
         print_nft(nft)
+    await manager.close()
+
     
 @cli.command("launch", short_help="Launch a new NFT")
 @click.option('-d', '--data', required=True, type=str)
@@ -75,9 +76,9 @@ async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
         datastr = f.readlines()
     nft_data = ("CreatorNFT", "".join(datastr))
     if for_sale:
-        launch_state = [90, price]
-    else:
         launch_state = [100, price]
+    else:
+        launch_state = [90, price]
     royalty = [royalty]
     tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
     print(f"Transaction id: {tx_id}")
@@ -105,7 +106,28 @@ async def update_cmd(ctx, nft_id, price, for_sale):
     print("\n\n NFT Updated!!")
     print_nft(nft)
     await manager.close
-    
+
+
+@cli.command("update", short_help="Update one of your NFTs")
+@click.option('-n', '--nft-id', required=True, type=str)
+@click.option('-p', '--price', required=True, type=int)
+@click.option('--for-sale/--not-for-sale', required=True, type=bool, default=False)
+@click.pass_context
+@coro
+async def update_cmd(ctx, nft_id, price, for_sale):
+    manager = NFTManager()
+    await manager.connect()
+    if for_sale:
+        new_state = [100, price]
+    else:
+        new_state = [90, price]
+    tx_id = await manager.update_nft(hexstr_to_bytes(nft_id), new_state)
+    print(f"Transaction id: {tx_id}")
+    nft = await manager.wait_for_confirmation(tx_id, nft_id)
+    print("\n\n NFT Updated!!")
+    print_nft(nft)
+    await manager.close
+
 
 
 
