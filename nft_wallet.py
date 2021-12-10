@@ -9,6 +9,8 @@ from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.util.db_wrapper import DBWrapper
 from chia.util.ints import uint32
 from chia.wallet.puzzles.load_clvm import load_clvm
+from clvm.casts import int_to_bytes, int_from_bytes
+
 from sim import load_clsp_relative
 
 
@@ -41,16 +43,17 @@ class NFT(Coin):
         return mod.as_python()[-1][0]
 
     def royalty(self):
-        _, args = self.last_spend.puzzle_reveal.to_program().uncurry()
-        _, inner_puzzle = list(args.as_iter())
-        _, inner_args = inner_puzzle.uncurry()
-        return inner_args.rest().rest().first().as_python()
+        mod, args = self.last_spend.solution.to_program().uncurry()
+        return mod.as_python()[0]
 
     def owner_pk(self):
         return self.state()[-1]
 
     def owner_puzzle_hash(self):
         return self.state()[-2]
+
+    def price(self):
+        return int_from_bytes(self.state()[1])
             
     
 
@@ -238,12 +241,10 @@ class NFTWallet:
             
 
     async def filter_singletons(self, singletons: List):
-        print("starting singleton filter")
         for cr in singletons:
             eve_cr = await self.node_client.get_coin_records_by_parent_ids([cr.coin.name()])
             assert len(eve_cr) > 0
             if eve_cr[0].spent:
-                print("getting eve_spend")
                 eve_spend = await self.node_client.get_puzzle_and_solution(eve_cr[0].coin.name(),
                                                               eve_cr[0].spent_block_index)
                 # uncurry the singletons inner puzzle
@@ -251,7 +252,6 @@ class NFTWallet:
                 _, inner_puzzle = list(args.as_iter())
                 mod, _ = inner_puzzle.uncurry()
                 if mod.get_tree_hash() == INNER_MOD.get_tree_hash():
-                    print("Found a CreatorNFT")
                     mod, _ = eve_spend.solution.to_program().uncurry()
                     state = mod.as_python()[-1][0]
                     await self.save_launcher(cr.coin.name(), state[-1])

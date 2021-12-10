@@ -145,7 +145,7 @@ def uncurry_solution(solution: Program):
     return mod.as_python()[-1][0]
 
 
-def make_buy_spend(nft_coin, new_state, payment_coin, payment_coin_puzzle, launcher_coin, last_spend):
+def make_buy_spend_old(nft_coin, new_state, payment_coin, payment_coin_puzzle, launcher_coin, last_spend):
     old_state, royalty = uncurry_state_and_royalty(last_spend.puzzle_reveal.to_program())
     current_state = uncurry_solution(last_spend.solution.to_program())
     args = [INNER_MOD.get_tree_hash(), current_state, royalty]
@@ -177,6 +177,58 @@ def make_buy_spend(nft_coin, new_state, payment_coin, payment_coin_puzzle, launc
     p2_spend = CoinSpend(p2_coin, p2_puzzle, p2_solution)
     payment_spend = CoinSpend(payment_coin, payment_coin_puzzle, delegated_sol)
     return (nft_spend, p2_spend, payment_spend)
+
+
+
+
+
+def make_buy_spend(nft: NFT, new_state, payment_coin, payment_coin_puzzle):
+    # old_state, royalty = uncurry_state_and_royalty(nft.last_spend.puzzle_reveal.to_program())
+    # current_state = uncurry_solution(nft.last_spend.solution.to_program())
+    old_state, royalty = uncurry_state_and_royalty(nft.last_spend.puzzle_reveal.to_program())
+    current_state = uncurry_solution(nft.last_spend.solution.to_program())
+    args = [INNER_MOD.get_tree_hash(), current_state, royalty]
+
+
+    current_inner_puzzle = INNER_MOD.curry(*args)
+    current_singleton_puzzle = SINGLETON_MOD.curry(
+        (SINGLETON_MOD_HASH, (nft.launcher_id, LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
+    )
+    
+    assert current_singleton_puzzle.get_tree_hash() == nft.puzzle_hash
+    assert nft.state()[0] == int_to_bytes(100)
+
+    price = int_from_bytes(nft.state()[1])
+
+    
+
+    p2_puzzle = P2_MOD.curry(SINGLETON_MOD_HASH, nft.launcher_id, LAUNCHER_PUZZLE_HASH)
+    p2_coin = Coin(payment_coin.name(), p2_puzzle.get_tree_hash(), price)
+    lineage_proof = singleton_top_layer.lineage_proof_for_coinsol(nft.last_spend)
+    inner_solution = [new_state, p2_coin.name()]
+    singleton_solution = singleton_top_layer.solution_for_singleton(lineage_proof, nft.amount, inner_solution)
+
+    conds = run_singleton(current_singleton_puzzle, singleton_solution)
+    print(conds)
+
+    p2_solution = Program.to([current_inner_puzzle.get_tree_hash(), p2_coin.name(), new_state])
+    delegated_cond = [
+        [ConditionOpcode.CREATE_COIN, p2_puzzle.get_tree_hash(), price],
+        [ConditionOpcode.CREATE_COIN, payment_coin_puzzle.get_tree_hash(), payment_coin.amount - price],
+    ]
+    delegated_puz = Program.to((1, delegated_cond))
+    delegated_sol = Program.to([[], delegated_puz, []])
+
+    # make coin spends
+    nft_spend = CoinSpend(nft.as_coin(), current_singleton_puzzle, singleton_solution)
+    p2_spend = CoinSpend(p2_coin, p2_puzzle, p2_solution)
+    payment_spend = CoinSpend(payment_coin, payment_coin_puzzle, delegated_sol)
+    return (nft_spend, p2_spend, payment_spend)
+
+
+
+
+
 
 
 def make_update_spend_old(nft_coin, launcher_coin, new_state, last_spend):
