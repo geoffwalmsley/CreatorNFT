@@ -1,3 +1,4 @@
+import sys
 import asyncio
 import aiosqlite
 from pathlib import Path
@@ -258,13 +259,12 @@ class NFTManager:
 
         
         
-async def main():
+async def main(func):
     # DATA
     amount = 101
     nft_data = ("NFT TEST", "Hash Data")
     launch_state = [100, 1000] # append ph and pk later
     royalty = [10]
-
     
     manager = NFTManager()
     await manager.connect()
@@ -273,15 +273,17 @@ async def main():
     await manager.nft_wallet.update_to_current_block()
 
     # Launch a new NFT
-    # tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
-    # print(f"\nSubmitted tx: {tx_id}")
-    # nft = await manager.wait_for_confirmation(tx_id, launcher_id)
-    # asyncio.sleep(2)
+    if func == "launch":
+        print("launching")
+        tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
+        print(f"\nSubmitted tx: {tx_id}")
+        nft = await manager.wait_for_confirmation(tx_id, launcher_id)
     
     # List stored NFTs
-    # await manager.nft_wallet.update_to_current_block()
-    # nfts = await manager.get_my_nfts()
-    # print(nfts)    
+    if func == "list":
+        await manager.nft_wallet.update_to_current_block()
+        nfts = await manager.get_my_nfts()
+        print(nfts[:5])    
     
     # State update
     # my_nft = await manager.nft_wallet.get_nft_by_launcher_id(nfts[-1])
@@ -290,16 +292,21 @@ async def main():
     # nft = await manager.wait_for_confirmation(tx_id, my_nft.launcher_id)
     # print(nft.state())
 
-    # Find for sale nfts    
-    nfts_for_sale = await manager.get_for_sale_nfts()
+    # Find for sale nfts
+    if func == "sale":
+        print("finding for sale")
+        nfts_for_sale = await manager.get_for_sale_nfts()
+        if nfts_for_sale:
+            nft = nfts_for_sale[-1]
+            print(nft)
 
     # Purchase spend (needs second wallet)
-    if nfts_for_sale:
-        nft = nfts_for_sale[-1]
-        print(nft)
-
-    # tx_id = await manager.buy_nft(nft)
-    # print(tx_id)
+    if func == "buy":
+        nfts_for_sale = await manager.get_for_sale_nfts()
+        if nfts_for_sale:
+            nft = nfts_for_sale[-1]
+            tx_id = await manager.buy_nft(nft)
+            print(f"\n Submitted tx: {tx_id}")
     
 
     await manager.close()
@@ -308,4 +315,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    m = asyncio.run(main())
+
+    func = sys.argv[1]
+    
+    m = asyncio.run(main(func))
