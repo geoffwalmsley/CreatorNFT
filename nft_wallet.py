@@ -301,7 +301,7 @@ class NFTWallet:
         return NFT(launcher_id, coin_rec[0].coin, last_spend, nft_data, royalty)
 
     async def save_launcher(self, launcher_id, pk=b""):
-        print(f"Saving: {pk}")
+        print(f"Saving PK: {pk}")
         cursor = await self.db_connection.execute("INSERT OR REPLACE INTO nft_coins (launcher_id, owner_pk) VALUES (?, ?)", (bytes(launcher_id), bytes(pk)))
         await cursor.close()
         await self.db_connection.commit()

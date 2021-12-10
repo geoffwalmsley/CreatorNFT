@@ -204,7 +204,7 @@ class NFTManager:
             if not item:
                 return await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
             else:
-                print("waiting")
+                print("Waiting for block (30s)")
                 await asyncio.sleep(30)
 
     
@@ -225,11 +225,12 @@ class NFTManager:
             return tx_id
 
     async def get_my_nfts(self):
-        launcher_ids = await self.nft_wallet.get_nfts(self.nft_pk)
+        launcher_ids = await self.nft_wallet.get_all_nfts()
         my_nfts = []
         for launcher_id in launcher_ids[:10]:
-            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
-            my_nfts.append(nft)
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id[0])
+            if nft.owner_pk() == bytes(self.nft_pk):
+                my_nfts.append(nft)
         return my_nfts
 
     async def get_for_sale_nfts(self):
@@ -238,10 +239,7 @@ class NFTManager:
         for_sale_nfts = []
         for launcher_id in launcher_ids[:10]:
             nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id[0])
-            print(int_from_bytes(nft.state()[0]))
             if nft.is_for_sale():
-                print("for sale")
-                # if not await self.is_my_nft(nft):
                 for_sale_nfts.append(nft)
         return for_sale_nfts
 
@@ -250,7 +248,8 @@ class NFTManager:
         if nft.owner_pk() == bytes(self.nft_pk):
             return True
 
-    async def buy_nft(self, nft: NFT):
+    async def buy_nft(self, launcher_id: bytes):
+        nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
         addr = await self.wallet_client.get_next_address(1, True)
         ph = decode_puzzle_hash(addr)
         new_state = [90, nft.price(), ph, self.nft_pk]
@@ -263,7 +262,6 @@ class NFTManager:
                                     DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,)
         res = await self.node_client.push_tx(sb)
         if res['success']:
-            print("txn added to mempool")
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
 
