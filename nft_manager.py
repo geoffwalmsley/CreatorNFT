@@ -207,18 +207,13 @@ class NFTManager:
                 print("waiting")
                 await asyncio.sleep(30)
 
-    async def get_my_nfts(self):
-        return await self.nft_wallet.get_nfts(self.nft_pk)
-
-    async def update_nft(self, nft: NFT, new_state: List):
+    
+    async def update_nft(self, nft_id: bytes, new_state):
+        nft = await self.nft_wallet.get_nft_by_launcher_id(nft_id)
+        new_state += [puzzle_for_pk(self.nft_pk).get_tree_hash(), self.nft_pk]
         update_spend = driver.make_update_spend(nft, new_state)
         conds = driver.run_singleton(update_spend.puzzle_reveal.to_program(), update_spend.solution.to_program())
         target_pk = conds[-1][1]
-        print(nft.launcher_id.hex())
-        print(target_pk)
-        print(self.nft_pk)
-        print(puzzle_for_pk(self.nft_pk).get_tree_hash())
-        # return None
         
         sb = await sign_coin_spends([update_spend],
                                     self.pk_to_sk,
@@ -226,9 +221,16 @@ class NFTManager:
                                     DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,)
         res = await self.node_client.push_tx(sb)
         if res['success']:
-            print("txn added to mempool")
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
+
+    async def get_my_nfts(self):
+        launcher_ids = await self.nft_wallet.get_nfts(self.nft_pk)
+        my_nfts = []
+        for launcher_id in launcher_ids[:10]:
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
+            my_nfts.append(nft)
+        return my_nfts
 
     async def get_for_sale_nfts(self):
         launcher_ids = await self.nft_wallet.get_nfts()
@@ -264,24 +266,22 @@ class NFTManager:
 
 
 
-    async def print_nfts(self, launcher_ids: List[bytes]):
+    async def print_launcher_ids(self, launcher_ids: List[bytes]):
         for launcher_id in launcher_ids:
             nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
-            print("\n")
-            print("-"*50)
-            print(f"Details for NFT:\n{nft.launcher_id.hex()}\n")
-            print(f"Price: {nft.price()}")
-            print(f"Royalty: {nft.royalty_pc()}%\n")
-            print(f"Data:  {nft.data}")
-            print("-"*50)
-            print("\n")
 
+    async def get_nft(self, launcher_id):
+        nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
+        return nft
 
         
 async def main(func):
     # DATA
     amount = 101
-    nft_data = ("NFT TEST", "Hash Data")
+    with open(Path("art/bird1.txt"), 'r') as f:
+        k = f.readlines()
+    data = "".join(k)
+    nft_data = ("CreatorNFT", data)
     launch_state = [100, 1000] # append ph and pk later
     royalty = [10]
     
