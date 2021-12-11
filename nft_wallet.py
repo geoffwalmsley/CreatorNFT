@@ -234,7 +234,7 @@ class NFTWallet:
             current_block -= 1
 
         singletons = await self.node_client.get_coin_records_by_puzzle_hash(LAUNCHER_PUZZLE_HASH, start_height=current_block, end_height=new_height)
-        print(f"Updating {len(singletons)} Singletons")
+        print(f"Checking {len(singletons)} Singletons")
         await self.filter_singletons(singletons)
 
         while new_height > current_block:
@@ -329,8 +329,6 @@ class NFTWallet:
                 last_spend = await self.node_client.get_puzzle_and_solution(current_coin_record.coin.name(), current_coin_record.spent_block_index)
                 if len(next_coin_records) == 3:
                     # last spend was purchase spend, so separate out the puzzlehashes
-                    print("Purchase Spend")
-
                     _, args = last_spend.puzzle_reveal.to_program().uncurry()
                     _, inner_puzzle = list(args.as_iter())
                     _, inner_args = inner_puzzle.uncurry()
@@ -340,12 +338,10 @@ class NFTWallet:
                         if rec.coin.puzzle_hash not in [state[2], royalty[0]]:
                             next_parent = rec.coin
                 if len(next_coin_records) == 1:
-                    print("Update Spend")
                     next_parent = next_coin_records[0].coin
                 nft_id = next_parent.name()
                 last_coin_record = current_coin_record
             else:
-                print("Got Unspent")
                 last_spend = await self.node_client.get_puzzle_and_solution(last_coin_record.coin.name(), last_coin_record.spent_block_index)
                 _, args = last_spend.puzzle_reveal.to_program().uncurry()
                 _, inner_puzzle = list(args.as_iter())
@@ -353,9 +349,6 @@ class NFTWallet:
                 # state = inner_args.rest().first().as_python()
                 royalty = inner_args.rest().rest().first().as_python()
                 nft = NFT(launcher_id, current_coin_record.coin, last_spend, nft_data, royalty)
-                print(f"Launcher ID: {launcher_id.hex()}")
-                print(f"royalty: {royalty}")
-                print(f"{nft_data}")
                 return nft
 
 
@@ -364,7 +357,6 @@ class NFTWallet:
     
 
     async def save_launcher(self, launcher_id, pk=b""):
-        print(f"Saving PK: {pk}")
         cursor = await self.db_connection.execute("INSERT OR REPLACE INTO nft_coins (launcher_id, owner_pk) VALUES (?, ?)", (bytes(launcher_id), bytes(pk)))
         await cursor.close()
         await self.db_connection.commit()
