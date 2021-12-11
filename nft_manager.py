@@ -164,7 +164,7 @@ class NFTManager:
 
 
     async def launch_nft(self, amount, nft_data: Tuple, launch_state: List, royalty: List):
-        addr = await self.wallet_client.get_next_address(1, True)
+        addr = await self.wallet_client.get_next_address(1, False)
         puzzle_hash = decode_puzzle_hash(addr)
         launch_state += [puzzle_hash, self.nft_pk]
         royalty.insert(0, puzzle_hash)
@@ -215,7 +215,7 @@ class NFTManager:
     
     async def update_nft(self, nft_id: bytes, new_state):
         nft = await self.nft_wallet.get_nft_by_launcher_id(nft_id)
-        addr = await self.wallet_client.get_next_address(1, True)
+        addr = await self.wallet_client.get_next_address(1, False)
         puzzle_hash = decode_puzzle_hash(addr)
         new_state += [puzzle_hash, self.nft_pk]
         update_spend = driver.make_update_spend(nft, new_state)
@@ -253,7 +253,7 @@ class NFTManager:
 
     async def buy_nft(self, launcher_id: bytes):
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
-        addr = await self.wallet_client.get_next_address(1, True)
+        addr = await self.wallet_client.get_next_address(1, False)
         ph = decode_puzzle_hash(addr)
         new_state = [90, nft.price(), ph, self.nft_pk]
         payment_coin, payment_coin_puzzle = await self.choose_std_coin(nft.price())
@@ -374,7 +374,7 @@ async def main(func):
         print(nft)
 
     if func == "test":
-        nft_id = hexstr_to_bytes("b36bb00a79bb4a9effedca2c5bd25b49d337c8c43a4cdf81342ec921afa6649c")
+        nft_id = hexstr_to_bytes("fa0496491d833a7c414608f011aedbf6698a6847b00a65a0d32e17c7f6d0599f")
         nft = await manager.nft_wallet.get_nft_by_launcher_id(nft_id)
         print(nft.state())
                 
