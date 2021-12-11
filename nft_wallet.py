@@ -269,21 +269,34 @@ class NFTWallet:
 
                 
 
-    async def get_nft_by_launcher_id(self, launcher_id: bytes32):
+    async def get_nft_by_launcher_id_old(self, launcher_id: bytes32):
         l_coin_rec = await self.node_client.get_coin_record_by_name(launcher_id)
+        if not l_coin_rec:
+            return None
         
         spend = await self.node_client.get_puzzle_and_solution(l_coin_rec.coin.name(),
                                                                   l_coin_rec.spent_block_index)
 
         nft_data = spend.solution.to_program().uncurry()[0].as_python()[-1]
         
+        # This is the eve coin.
         coin_rec = await self.node_client.get_coin_records_by_parent_ids([launcher_id])
+        
+        if not coin_rec:
+            return None
+
+        eve_child = await self.node_client.get_coin_records_by_parent_ids([coin_rec.coin.name()])
+
+        # get the eve coin's children
         while True:
             if coin_rec[0].spent:
                 # get nest coin rec
                 last_rec = coin_rec[0]
                 coin_rec = await self.node_client.get_coin_records_by_parent_ids(
                                                    [coin_rec[0].coin.name()])
+                if not coin_rec:
+                    current_rec=last_rec
+                    break
             else:
                 # return current and prev
                 current_rec = coin_rec[0]
@@ -299,6 +312,56 @@ class NFTWallet:
         # state = inner_args.rest().first().as_python()
         royalty = inner_args.rest().rest().first().as_python()
         return NFT(launcher_id, coin_rec[0].coin, last_spend, nft_data, royalty)
+
+
+
+    async def get_nft_by_launcher_id(self, launcher_id: bytes32):
+        nft_id = launcher_id
+        launcher_rec = await self.node_client.get_coin_record_by_name(launcher_id)
+        launcher_spend = await self.node_client.get_puzzle_and_solution(launcher_rec.coin.name(),
+                                                                  launcher_rec.spent_block_index)
+        nft_data = launcher_spend.solution.to_program().uncurry()[0].as_python()[-1]
+        
+        while True:
+            current_coin_record = await self.node_client.get_coin_record_by_name(nft_id)
+            if current_coin_record.spent:
+                next_coin_records = await self.node_client.get_coin_records_by_parent_ids([nft_id])
+                last_spend = await self.node_client.get_puzzle_and_solution(current_coin_record.coin.name(), current_coin_record.spent_block_index)
+                if len(next_coin_records) == 3:
+                    # last spend was purchase spend, so separate out the puzzlehashes
+                    print("Purchase Spend")
+
+                    _, args = last_spend.puzzle_reveal.to_program().uncurry()
+                    _, inner_puzzle = list(args.as_iter())
+                    _, inner_args = inner_puzzle.uncurry()
+                    state = inner_args.rest().first().as_python()
+                    royalty = inner_args.rest().rest().first().as_python()
+                    for rec in next_coin_records:
+                        if rec.coin.puzzle_hash not in [state[2], royalty[0]]:
+                            next_parent = rec.coin
+                if len(next_coin_records) == 1:
+                    print("Update Spend")
+                    next_parent = next_coin_records[0].coin
+                nft_id = next_parent.name()
+                last_coin_record = current_coin_record
+            else:
+                print("Got Unspent")
+                last_spend = await self.node_client.get_puzzle_and_solution(last_coin_record.coin.name(), last_coin_record.spent_block_index)
+                _, args = last_spend.puzzle_reveal.to_program().uncurry()
+                _, inner_puzzle = list(args.as_iter())
+                _, inner_args = inner_puzzle.uncurry()
+                # state = inner_args.rest().first().as_python()
+                royalty = inner_args.rest().rest().first().as_python()
+                nft = NFT(launcher_id, current_coin_record.coin, last_spend, nft_data, royalty)
+                print(f"Launcher ID: {launcher_id.hex()}")
+                print(f"royalty: {royalty}")
+                print(f"{nft_data}")
+                return nft
+
+
+
+
+    
 
     async def save_launcher(self, launcher_id, pk=b""):
         print(f"Saving PK: {pk}")

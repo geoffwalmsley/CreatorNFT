@@ -44,6 +44,19 @@ def print_nft(nft: NFT):
 def cli(ctx: click.Context):
     ctx.ensure_object(dict)
 
+@cli.command("view", short_help="View a single NFT by id")
+@click.option('-n', '--nft-id', required=True, type=str)
+@click.pass_context
+@coro
+async def view_cmd(ctx, nft_id):
+    manager = NFTManager()
+    await manager.connect()
+    nft = await manager.view_nft(hexstr_to_bytes(nft_id))
+    if nft:
+        print_nft(nft)
+    else:
+        print(f"\nNo record found for:\n{nft_id}")
+    await manager.close()
 
 @cli.command("list", short_help="Show CreatorNFT version")
 @click.pass_context

@@ -271,9 +271,11 @@ class NFTManager:
         for launcher_id in launcher_ids:
             nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
 
-    async def get_nft(self, launcher_id):
+    async def view_nft(self, launcher_id):
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
         return nft
+
+    
 
         
 async def main(func):
@@ -334,13 +336,50 @@ async def main(func):
             tx_id = await manager.buy_nft(nft)
             print(f"\n Submitted tx: {tx_id}")
 
-    if func == "test":
+    if func == "test2":
         # nfts = await manager.get_for_sale_nfts()
-        nfts = await manager.nft_wallet.get_all_nfts()
-        for nft in nfts:
-            print(nft)
-        
-    
+        nft_id = hexstr_to_bytes("d88d8daa1fa1d0b7be3b379fcb554a43f53fa3e9c80825636652f8bfc655c184")
+        nft_data = [100, 200, "sdc", "asc"]
+        royalty = ["acadc", 10]
+        while True:
+            current_coin_record = await manager.node_client.get_coin_record_by_name(nft_id)
+            if current_coin_record.spent:
+                next_coin_records = await manager.node_client.get_coin_records_by_parent_ids([nft_id])
+                last_spend = await manager.node_client.get_puzzle_and_solution(current_coin_record.coin.name(), current_coin_record.spent_block_index)
+                if len(next_coin_records) == 3:
+                    # last spend was purchase spend, so separate out the puzzlehashes
+                    print("Purchase Spend")
+
+                    _, args = last_spend.puzzle_reveal.to_program().uncurry()
+                    _, inner_puzzle = list(args.as_iter())
+                    _, inner_args = inner_puzzle.uncurry()
+                    state = inner_args.rest().first().as_python()
+                    royalty = inner_args.rest().rest().first().as_python()
+                    for rec in next_coin_records:
+                        if rec.coin.puzzle_hash not in [state[2], royalty[0]]:
+                            next_parent = rec.coin
+                if len(next_coin_records) == 1:
+                    print("Update Spend")
+                    next_parent = next_coin_records[0].coin
+                nft_id = next_parent.name()
+                last_coin_record = current_coin_record
+            else:
+                print("Got Unspent")
+                last_spend = await manager.node_client.get_puzzle_and_solution(last_coin_record.coin.name(), last_coin_record.spent_block_index)
+                _, args = last_spend.puzzle_reveal.to_program().uncurry()
+                _, inner_puzzle = list(args.as_iter())
+                _, inner_args = inner_puzzle.uncurry()
+                # state = inner_args.rest().first().as_python()
+                royalty = inner_args.rest().rest().first().as_python()
+                nft = NFT(nft_id, current_coin_record.coin, last_spend, nft_data, royalty)
+                break
+        print(nft)
+
+    if func == "test":
+        nft_id = hexstr_to_bytes("d88d8daa1fa1d0b7be3b379fcb554a43f53fa3e9c80825636652f8bfc655c184")
+        await manager.nft_wallet.get_nft_by_launcher_id(nft_id)
+                
+                
 
     await manager.close()
     
