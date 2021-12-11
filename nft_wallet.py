@@ -59,6 +59,9 @@ class NFT(Coin):
     def owner_pk(self):
         return self.state()[-1]
 
+    def owner_fingerprint(self):
+        return G1Element(self.owner_pk()).get_fingerprint()
+
     def owner_puzzle_hash(self):
         return self.state()[-2]
 
@@ -266,55 +269,7 @@ class NFTWallet:
                     mod, _ = eve_spend.solution.to_program().uncurry()
                     state = mod.as_python()[-1][0]
                     await self.save_launcher(cr.coin.name(), state[-1])
-
                 
-
-    async def get_nft_by_launcher_id_old(self, launcher_id: bytes32):
-        l_coin_rec = await self.node_client.get_coin_record_by_name(launcher_id)
-        if not l_coin_rec:
-            return None
-        
-        spend = await self.node_client.get_puzzle_and_solution(l_coin_rec.coin.name(),
-                                                                  l_coin_rec.spent_block_index)
-
-        nft_data = spend.solution.to_program().uncurry()[0].as_python()[-1]
-        
-        # This is the eve coin.
-        coin_rec = await self.node_client.get_coin_records_by_parent_ids([launcher_id])
-        
-        if not coin_rec:
-            return None
-
-        eve_child = await self.node_client.get_coin_records_by_parent_ids([coin_rec.coin.name()])
-
-        # get the eve coin's children
-        while True:
-            if coin_rec[0].spent:
-                # get nest coin rec
-                last_rec = coin_rec[0]
-                coin_rec = await self.node_client.get_coin_records_by_parent_ids(
-                                                   [coin_rec[0].coin.name()])
-                if not coin_rec:
-                    current_rec=last_rec
-                    break
-            else:
-                # return current and prev
-                current_rec = coin_rec[0]
-                break
-            
-        last_spend = await self.node_client.get_puzzle_and_solution(current_rec.coin.parent_coin_info,
-                                                                    current_rec.confirmed_block_index)
-        
-        # old_state, royalty = driver.uncurry_state_and_royalty(last_spend.puzzle_reveal.to_program())
-        _, args = last_spend.puzzle_reveal.to_program().uncurry()
-        _, inner_puzzle = list(args.as_iter())
-        _, inner_args = inner_puzzle.uncurry()
-        # state = inner_args.rest().first().as_python()
-        royalty = inner_args.rest().rest().first().as_python()
-        return NFT(launcher_id, coin_rec[0].coin, last_spend, nft_data, royalty)
-
-
-
     async def get_nft_by_launcher_id(self, launcher_id: bytes32):
         nft_id = launcher_id
         launcher_rec = await self.node_client.get_coin_record_by_name(launcher_id)
@@ -350,11 +305,6 @@ class NFTWallet:
                 royalty = inner_args.rest().rest().first().as_python()
                 nft = NFT(launcher_id, current_coin_record.coin, last_spend, nft_data, royalty)
                 return nft
-
-
-
-
-    
 
     async def save_launcher(self, launcher_id, pk=b""):
         cursor = await self.db_connection.execute("INSERT OR REPLACE INTO nft_coins (launcher_id, owner_pk) VALUES (?, ?)", (bytes(launcher_id), bytes(pk)))

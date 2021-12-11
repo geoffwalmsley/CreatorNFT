@@ -239,14 +239,10 @@ class NFTManager:
         for_sale_nfts = []
         for launcher_id in launcher_ids[:10]:
             nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id[0])
-            if nft.is_for_sale():
+            if (nft.is_for_sale()) and (nft.owner_pk() != bytes(self.nft_pk)):
                 for_sale_nfts.append(nft)
         return for_sale_nfts
 
-
-    async def is_my_nft(self, nft: NFT):
-        if nft.owner_pk() == bytes(self.nft_pk):
-            return True
 
     async def buy_nft(self, launcher_id: bytes):
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
@@ -265,11 +261,6 @@ class NFTManager:
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
 
-
-
-    async def print_launcher_ids(self, launcher_ids: List[bytes]):
-        for launcher_id in launcher_ids:
-            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
 
     async def view_nft(self, launcher_id):
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)

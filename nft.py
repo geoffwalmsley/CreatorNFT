@@ -20,11 +20,12 @@ def coro(f):
 def print_nft(nft: NFT):
     print("\n")
     print("-"*64)
-    print(f"Details for NFT:\n{nft.launcher_id.hex()}\n")
+    print(f"NFT ID:\n{nft.launcher_id.hex()}\n")
+    print(f"Owner: {nft.owner_fingerprint()}")
     if nft.is_for_sale():
-        print("For Sale")
+        print("Status: For Sale")
     else:
-        print("Not for sale")
+        print("Status: Not for sale")
     print(f"Price: {nft.price()}")
     print(f"Royalty: {nft.royalty_pc()}%\n")
     print(f"Chialisp: {str(nft.data[0])}\n")
