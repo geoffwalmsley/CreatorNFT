@@ -96,6 +96,9 @@ class NFTManager:
 
         if self.connection:
             await self.connection.close()
+
+    async def init_db(self):
+        await self.nft_wallet.update_to_current_block()
             
 
     async def load_master_sk(self, fp_index=0):

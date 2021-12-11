@@ -45,6 +45,16 @@ def print_nft(nft: NFT):
 def cli(ctx: click.Context):
     ctx.ensure_object(dict)
 
+
+@cli.command("init", short_help="Start the nft database")
+@coro
+async def init_cmd():
+    manager = NFTManager()
+    await manager.connect()
+    await manager.init_db()
+    await manager.close()
+
+
 @cli.command("view", short_help="View a single NFT by id")
 @click.option('-n', '--nft-id', required=True, type=str)
 @click.pass_context
