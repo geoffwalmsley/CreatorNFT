@@ -304,6 +304,7 @@ class NFTWallet:
                 # state = inner_args.rest().first().as_python()
                 royalty = inner_args.rest().rest().first().as_python()
                 nft = NFT(launcher_id, current_coin_record.coin, last_spend, nft_data, royalty)
+                await self.save_nft(nft)
                 return nft
 
     async def save_launcher(self, launcher_id, pk=b""):
