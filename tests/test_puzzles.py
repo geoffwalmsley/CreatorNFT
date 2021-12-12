@@ -26,6 +26,7 @@ from chia.types.announcement import Announcement
 from CreatorNFT.sim import load_clsp_relative
 from CreatorNFT.sim import setup_node_only
 from CreatorNFT.driver import make_launcher_spend, make_found_spend, make_eve_spend, make_buy_spend, make_update_spend
+from CreatorNFT.nft_wallet import NFT
 
 
 SINGLETON_MOD = load_clvm("singleton_top_layer.clvm")
@@ -121,8 +122,12 @@ class TestCreatorNft:
         last_spend = await node.sim_client.get_puzzle_and_solution(
             nft_coin.parent_coin_info, nft_coin_record[0].confirmed_block_index
         )
+
+        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
+
+        
         nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft_coin, new_state, payment_coin, payment_coin_puzzle, launcher_coin, last_spend
+            nft, new_state, payment_coin, payment_coin_puzzle
         )
 
         sb = await sign_coin_spends(
@@ -163,7 +168,10 @@ class TestCreatorNft:
         last_spend = await node.sim_client.get_puzzle_and_solution(
             nft_coin.parent_coin_info, nft_coin_record.confirmed_block_index
         )
-        update_spend = make_update_spend(nft_coin, launcher_coin, new_state, last_spend)
+
+        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
+        
+        update_spend = make_update_spend(nft, new_state)
 
         sb = await sign_coin_spends(
             [update_spend],
@@ -195,8 +203,10 @@ class TestCreatorNft:
         payment_coin = await carol.choose_coin(price)
         payment_coin_puzzle = puzzle_for_pk(carol.pk_)
 
+        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
+
         nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft_coin, new_state, payment_coin, payment_coin_puzzle, launcher_coin, last_spend
+            nft, new_state, payment_coin, payment_coin_puzzle,
         )
 
         sb = await sign_coin_spends(
@@ -256,9 +266,13 @@ class TestCreatorNft:
         last_spend = await node.sim_client.get_puzzle_and_solution(
             nft_coin.parent_coin_info, nft_coin_record[0].confirmed_block_index
         )
+
+        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
+
         nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft_coin, new_state, payment_coin, payment_coin_puzzle, launcher_coin, last_spend
+            nft, new_state, payment_coin, payment_coin_puzzle,
         )
+        
 
         sb = await sign_coin_spends(
             [nft_spend, p2_spend, payment_spend],
@@ -298,7 +312,10 @@ class TestCreatorNft:
         last_spend = await node.sim_client.get_puzzle_and_solution(
             nft_coin.parent_coin_info, nft_coin_record.confirmed_block_index
         )
-        update_spend = make_update_spend(nft_coin, launcher_coin, new_state, last_spend)
+
+        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
+
+        update_spend = make_update_spend(nft, new_state)
 
         sb = await sign_coin_spends(
             [update_spend],
@@ -330,8 +347,10 @@ class TestCreatorNft:
         payment_coin = await carol.choose_coin(price)
         payment_coin_puzzle = puzzle_for_pk(carol.pk_)
 
+        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
+
         nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft_coin, new_state, payment_coin, payment_coin_puzzle, launcher_coin, last_spend
+            nft, new_state, payment_coin, payment_coin_puzzle,
         )
 
         sb = await sign_coin_spends(

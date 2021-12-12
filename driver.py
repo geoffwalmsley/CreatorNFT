@@ -23,8 +23,8 @@ from chia.wallet.lineage_proof import LineageProof
 from chia.wallet.puzzles import singleton_top_layer
 from chia.types.announcement import Announcement
 
-from sim import load_clsp_relative
-from nft_wallet import NFT
+from CreatorNFT.sim import load_clsp_relative
+from CreatorNFT.nft_wallet import NFT
 
 SINGLETON_MOD = load_clvm("singleton_top_layer.clvm")
 SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
@@ -150,17 +150,16 @@ def make_buy_spend(nft: NFT, new_state, payment_coin, payment_coin_puzzle):
     current_state = uncurry_solution(nft.last_spend.solution.to_program())
     args = [INNER_MOD.get_tree_hash(), current_state, royalty]
 
-
     current_inner_puzzle = INNER_MOD.curry(*args)
     current_singleton_puzzle = SINGLETON_MOD.curry(
         (SINGLETON_MOD_HASH, (nft.launcher_id, LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
     )
-    
+
     assert current_singleton_puzzle.get_tree_hash() == nft.puzzle_hash
     assert nft.state()[0] == int_to_bytes(100)
 
     price = int_from_bytes(nft.state()[1])
-    
+
     p2_puzzle = P2_MOD.curry(SINGLETON_MOD_HASH, nft.launcher_id, LAUNCHER_PUZZLE_HASH)
     p2_coin = Coin(payment_coin.name(), p2_puzzle.get_tree_hash(), price)
     lineage_proof = singleton_top_layer.lineage_proof_for_coinsol(nft.last_spend)
@@ -182,7 +181,7 @@ def make_buy_spend(nft: NFT, new_state, payment_coin, payment_coin_puzzle):
     nft_spend = CoinSpend(nft.as_coin(), current_singleton_puzzle, singleton_solution)
     p2_spend = CoinSpend(p2_coin, p2_puzzle, p2_solution)
     payment_spend = CoinSpend(payment_coin, payment_coin_puzzle, delegated_sol)
-    
+
     return (nft_spend, p2_spend, payment_spend)
 
 
@@ -200,7 +199,5 @@ def make_update_spend(nft: NFT, new_state):
 
     lineage_proof = singleton_top_layer.lineage_proof_for_coinsol(nft.last_spend)
     inner_solution = [new_state, []]
-    singleton_solution = singleton_top_layer.solution_for_singleton(
-        lineage_proof, nft.as_coin().amount, inner_solution
-    )
+    singleton_solution = singleton_top_layer.solution_for_singleton(lineage_proof, nft.as_coin().amount, inner_solution)
     return CoinSpend(nft.as_coin(), current_singleton_puzzle, singleton_solution)
