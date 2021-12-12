@@ -69,6 +69,7 @@ async def view_cmd(ctx, nft_id):
         print(f"\nNo record found for:\n{nft_id}")
     await manager.close()
 
+
 @cli.command("list", short_help="Show CreatorNFT version")
 @click.pass_context
 @coro
@@ -143,13 +144,18 @@ async def update_cmd(ctx, nft_id, price, for_sale):
 
 @cli.command("buy", short_help="Update one of your NFTs")
 @click.option('-n', '--nft-id', required=True, type=str)
+@click.option('-p', '--price', required=True, type=int)
+@click.option('--for-sale/--not-for-sale', required=True, type=bool, default=False)
 @click.pass_context
 @coro
-async def buy_cmd(ctx, nft_id):
+async def buy_cmd(ctx, nft_id, price, for_sale):
     manager = NFTManager()
     await manager.connect()
-        
-    tx_id = await manager.buy_nft(hexstr_to_bytes(nft_id))
+    if for_sale:
+        new_state = [100, price]
+    else:
+        new_state = [90, price]
+    tx_id = await manager.buy_nft(hexstr_to_bytes(nft_id), new_state)
     print(f"Transaction id: {tx_id}")
     nft = await manager.wait_for_confirmation(tx_id, hexstr_to_bytes(nft_id))
     print("\n\n NFT Purchased!!")

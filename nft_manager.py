@@ -251,11 +251,11 @@ class NFTManager:
         return for_sale_nfts
 
 
-    async def buy_nft(self, launcher_id: bytes):
+    async def buy_nft(self, launcher_id: bytes, new_state):
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
         addr = await self.wallet_client.get_next_address(1, False)
         ph = decode_puzzle_hash(addr)
-        new_state = [90, nft.price(), ph, self.nft_pk]
+        new_state += [ph, self.nft_pk]
         payment_coin, payment_coin_puzzle = await self.choose_std_coin(nft.price())
         nft_spend, p2_spend, payment_spend = driver.make_buy_spend(nft, new_state, payment_coin, payment_coin_puzzle)
     
