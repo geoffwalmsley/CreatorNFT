@@ -11,7 +11,7 @@ from chia.util.ints import uint32
 from chia.wallet.puzzles.load_clvm import load_clvm
 from clvm.casts import int_to_bytes, int_from_bytes
 
-from CreatorNFT.sim import load_clsp_relative
+from sim import load_clsp_relative
 
 
 log = logging.getLogger(__name__)
