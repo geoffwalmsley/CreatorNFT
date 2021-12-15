@@ -23,8 +23,8 @@ from chia.wallet.lineage_proof import LineageProof
 from chia.wallet.puzzles import singleton_top_layer
 from chia.types.announcement import Announcement
 
-from CreatorNFT.sim import load_clsp_relative
-from CreatorNFT.nft_wallet import NFT
+from sim import load_clsp_relative
+from nft_wallet import NFT
 
 SINGLETON_MOD = load_clvm("singleton_top_layer.clvm")
 SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
