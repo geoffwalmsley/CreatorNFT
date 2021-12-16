@@ -16,6 +16,7 @@ from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.simulator.simulator_protocol import FarmNewBlockProtocol
 from chia.types.peer_info import PeerInfo
 from chia.util.bech32m import encode_puzzle_hash
+from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.consensus.coinbase import create_puzzlehash_for_pk
 from chia.wallet.derive_keys import master_sk_to_wallet_sk
 from chia.util.ints import uint16, uint32
@@ -42,7 +43,7 @@ class TestNFTWallet:
 
             
     @pytest.mark.asyncio
-    async def test_three(self, three_wallet_nodes):
+    async def test_three(self, three_wallet_nodes, tmp_path):
         num_blocks = 5
         config = bt.config
         hostname = config["self_hostname"]
@@ -184,6 +185,14 @@ class TestNFTWallet:
             assert await wallet_0.wallet_state_manager.main_wallet.get_confirmed_balance() > 0
             # assert await wallet_0.wallet_state_manager.main_wallet.get_confirmed_balance() > 0
 
+            manager_0 = NFTManager(wallet_client_0, node_client_0, tmp_path/"nft_store_test_0.db")
+            manager_1 = NFTManager(wallet_client_1, node_client_1, tmp_path/"nft_store_test_1.db")
+            manager_2 = NFTManager(wallet_client_2, node_client_2, tmp_path/"nft_store_test_2.db")
+
+            await manager_0.connect()
+            await manager_1.connect()
+            await manager_2.connect()
+
             bs = await node_client_1.get_blockchain_state()
             print(bs)
             assert bs['peak'].height > 0
@@ -192,13 +201,24 @@ class TestNFTWallet:
             nft_data = ("CreatorNFT", "some data")
             launch_state = [100, 1000] # append ph and pk later
             royalty = [10]
-            manager = NFTManager(wallet_client_0, node_client_0, "nft_store_test.db")
-            await manager.connect()
-            tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
-            await manager.close()
+            tx_id, launcher_id = await manager_0.launch_nft(amount, nft_data, launch_state, royalty)
+
+            for i in range(0, num_blocks):
+                await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+
+            c = await manager_1.node_client.get_coin_record_by_name(launcher_id)
+            assert c
+
+
+            
+            
+            
+            await manager_0.close()
+            await manager_1.close()
+            await manager_2.close()
             
         finally:
-            await asyncio.sleep(5) # give the ongoing loops a second to finish.
+            await asyncio.sleep(2) # give the ongoing loops a second to finish.
             await rpc_cleanup_node_0()
             await rpc_cleanup_node_1()
             await rpc_cleanup_node_2()

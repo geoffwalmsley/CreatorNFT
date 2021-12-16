@@ -38,10 +38,10 @@ from chia.util.config import load_config
 from chia.util.ints import uint16, uint64
 from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 
-
 from sim import load_clsp_relative
 from nft_wallet import NFT, NFTWallet
 import driver
+
 
 SINGLETON_MOD = load_clvm("singleton_top_layer.clvm")
 SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
@@ -49,16 +49,15 @@ LAUNCHER_PUZZLE = load_clvm("singleton_launcher.clvm")
 LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 
-
-
 class NFTManager:
-    def __init__(self, wallet_client, node_client, db_name):
+    def __init__(self, wallet_client: WalletRpcClient, node_client: FullNodeRpcClient, db_name: str) -> None:
         self.wallet_client = wallet_client
         self.node_client = node_client
         self.db_name=db_name
+        self.connection = None
         self.key_dict = {}
 
-    async def connect(self, wallet_index=0):
+    async def connect(self, wallet_index: int =0) -> None:
         if not self.db_name:
             self.db_name = "nft_store.db"
         self.connection = await aiosqlite.connect(Path(self.db_name))
@@ -74,7 +73,7 @@ class NFTManager:
         await self.derive_unhardened_keys()
         await self.nft_wallet.update_to_current_block()
 
-    async def close(self):
+    async def close(self) -> None:
         if self.node_client:
             self.node_client.close()
 
@@ -84,7 +83,7 @@ class NFTManager:
         if self.connection:
             await self.connection.close()
 
-    async def derive_nft_keys(self, index=0):
+    async def derive_nft_keys(self, index: int =0) -> None:
         if not self.master_sk:
             await self.load_master_sk()
         _sk = master_sk_to_singleton_owner_sk(self.master_sk, index)
@@ -135,7 +134,7 @@ class NFTManager:
         raise ValueError("No spendable coins found")
 
 
-    async def launch_nft(self, amount, nft_data: Tuple, launch_state: List, royalty: List):
+    async def launch_nft(self, amount: int, nft_data: Tuple, launch_state: List, royalty: List):
         addr = await self.wallet_client.get_next_address(1, False)
         puzzle_hash = decode_puzzle_hash(addr)
         launch_state += [puzzle_hash, self.nft_pk]
