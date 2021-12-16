@@ -20,12 +20,13 @@ from chia.consensus.coinbase import create_puzzlehash_for_pk
 from chia.wallet.derive_keys import master_sk_to_wallet_sk
 from chia.util.ints import uint16, uint32
 from chia.wallet.transaction_record import TransactionRecord
-from chia.wallet.transaction_sorting import SortKey
+from chia.protocols.full_node_protocol import RespondBlock
+# from chia.wallet.transaction_sorting import SortKey
 from tests.setup_nodes import bt, setup_simulators_and_wallets, self_hostname
 from tests.time_out_assert import time_out_assert
 from tests.util.rpc import validate_get_routes
-
-log = logging.getLogger(__name__)
+from tests.connection_utils import connect_and_get_peer
+from nft_manager import NFTManager
 
 
 class TestNFTWallet:
@@ -34,163 +35,189 @@ class TestNFTWallet:
         async for _ in setup_simulators_and_wallets(1, 2, {}):
             yield _
 
+    @pytest.fixture(scope="function")
+    async def three_wallet_nodes(self):
+        async for _ in setup_simulators_and_wallets(3, 3, {}):
+            yield _
+
+            
     @pytest.mark.asyncio
-    async def test_wallet_make_transaction(self, two_wallet_nodes):
-        test_rpc_port = uint16(21529)
-        test_rpc_port_node = uint16(21530)
+    async def test_three(self, three_wallet_nodes):
         num_blocks = 5
-        full_nodes, wallets = two_wallet_nodes
-        full_node_api = full_nodes[0]
-        full_node_server = full_node_api.full_node.server
-        wallet_node, server_2 = wallets[0]
-        wallet_node_2, server_3 = wallets[1]
-        wallet = wallet_node.wallet_state_manager.main_wallet
-        wallet_2 = wallet_node_2.wallet_state_manager.main_wallet
-        ph = await wallet.get_new_puzzlehash()
-        ph_2 = await wallet_2.get_new_puzzlehash()
-
-        await server_2.start_client(PeerInfo("localhost", uint16(full_node_server._port)), None)
-
-        for i in range(0, num_blocks):
-            await full_node_api.farm_new_transaction_block(FarmNewBlockProtocol(ph))
-
-        initial_funds = sum(
-            [calculate_pool_reward(uint32(i)) + calculate_base_farmer_reward(uint32(i)) for i in range(1, num_blocks)]
-        )
-        initial_funds_eventually = sum(
-            [
-                calculate_pool_reward(uint32(i)) + calculate_base_farmer_reward(uint32(i))
-                for i in range(1, num_blocks + 1)
-            ]
-        )
-
-        wallet_rpc_api = WalletRpcApi(wallet_node)
-
         config = bt.config
         hostname = config["self_hostname"]
         daemon_port = config["daemon_port"]
+        wallet_rpc_port_0 = 21520
+        wallet_rpc_port_1 = 21521
+        wallet_rpc_port_2 = 21522
 
+        node_rpc_port_0 = 21530
+        node_rpc_port_1 = 21531
+        node_rpc_port_2 = 21532
+        
+        full_nodes, wallets = three_wallet_nodes
+        
+        wallet_0, wallet_server_0 = wallets[0]
+        wallet_1, wallet_server_1 = wallets[1]
+        wallet_2, wallet_server_2 = wallets[2]
+        
+        full_node_api_0 = full_nodes[0]
+        full_node_api_1 = full_nodes[1]
+        full_node_api_2 = full_nodes[2]
+
+        full_node_0 = full_node_api_0.full_node
+        full_node_1 = full_node_api_1.full_node
+        full_node_2 = full_node_api_2.full_node
+
+        server_0 = full_node_0.server
+        server_1 = full_node_1.server
+        server_2 = full_node_2.server
+
+        
+        
+        # wallet_0 <-> server_0
+        await wallet_server_0.start_client(PeerInfo(self_hostname, uint16(server_0._port)), None)
+        # wallet_1 <-> server_1
+        await wallet_server_1.start_client(PeerInfo(self_hostname, uint16(server_1._port)), None)
+        # wallet_2 <-> server_2
+        await wallet_server_2.start_client(PeerInfo(self_hostname, uint16(server_2._port)), None)
+
+        await server_0.start_client(PeerInfo(self_hostname, uint16(server_1._port)))
+        await server_1.start_client(PeerInfo(self_hostname, uint16(server_2._port)))
+        await server_2.start_client(PeerInfo(self_hostname, uint16(server_0._port)))
+
+        
         def stop_node_cb():
             pass
-
-        full_node_rpc_api = FullNodeRpcApi(full_node_api.full_node)
-
-        rpc_cleanup_node = await start_rpc_server(
-            full_node_rpc_api,
+        
+        wallet_rpc_api_0 = WalletRpcApi(wallet_0)
+        wallet_rpc_api_1 = WalletRpcApi(wallet_1)
+        wallet_rpc_api_2 = WalletRpcApi(wallet_2)
+        
+        full_node_rpc_api_0 = FullNodeRpcApi(full_node_0)
+        full_node_rpc_api_1 = FullNodeRpcApi(full_node_1)
+        full_node_rpc_api_2 = FullNodeRpcApi(full_node_2)
+        
+        rpc_cleanup_node_0 = await start_rpc_server(
+            full_node_rpc_api_0,
             hostname,
             daemon_port,
-            test_rpc_port_node,
+            node_rpc_port_0,
             stop_node_cb,
             bt.root_path,
             config,
             connect_to_daemon=False,
         )
-        rpc_cleanup = await start_rpc_server(
-            wallet_rpc_api,
+        rpc_cleanup_node_1 = await start_rpc_server(
+            full_node_rpc_api_1,
             hostname,
             daemon_port,
-            test_rpc_port,
+            node_rpc_port_1,
+            stop_node_cb,
+            bt.root_path,
+            config,
+            connect_to_daemon=False,
+        )
+        rpc_cleanup_node_2 = await start_rpc_server(
+            full_node_rpc_api_2,
+            hostname,
+            daemon_port,
+            node_rpc_port_2,
+            stop_node_cb,
+            bt.root_path,
+            config,
+            connect_to_daemon=False,
+        )
+        
+        rpc_cleanup_wallet_0 = await start_rpc_server(
+            wallet_rpc_api_0,
+            hostname,
+            daemon_port,
+            wallet_rpc_port_0,
+            stop_node_cb,
+            bt.root_path,
+            config,
+            connect_to_daemon=False,
+        )
+        rpc_cleanup_wallet_1 = await start_rpc_server(
+            wallet_rpc_api_1,
+            hostname,
+            daemon_port,
+            wallet_rpc_port_1,
+            stop_node_cb,
+            bt.root_path,
+            config,
+            connect_to_daemon=False,
+        )
+        rpc_cleanup_wallet_2 = await start_rpc_server(
+            wallet_rpc_api_2,
+            hostname,
+            daemon_port,
+            wallet_rpc_port_2,
             stop_node_cb,
             bt.root_path,
             config,
             connect_to_daemon=False,
         )
 
-        await time_out_assert(5, wallet.get_confirmed_balance, initial_funds)
-        await time_out_assert(5, wallet.get_unconfirmed_balance, initial_funds)
+        wallet_client_0 = await WalletRpcClient.create(self_hostname, wallet_rpc_port_0, bt.root_path, config)
+        wallet_client_1 = await WalletRpcClient.create(self_hostname, wallet_rpc_port_1, bt.root_path, config)
+        wallet_client_2 = await WalletRpcClient.create(self_hostname, wallet_rpc_port_2, bt.root_path, config)
 
-        client = await WalletRpcClient.create(self_hostname, test_rpc_port, bt.root_path, config)
-        await validate_get_routes(client, wallet_rpc_api)
-        client_node = await FullNodeRpcClient.create(self_hostname, test_rpc_port_node, bt.root_path, config)
+        node_client_0 = await FullNodeRpcClient.create(self_hostname, node_rpc_port_0, bt.root_path, config)
+        node_client_1 = await FullNodeRpcClient.create(self_hostname, node_rpc_port_1, bt.root_path, config)
+        node_client_2 = await FullNodeRpcClient.create(self_hostname, node_rpc_port_2, bt.root_path, config)
+
+        
         try:
-            addr = encode_puzzle_hash(await wallet_node_2.wallet_state_manager.main_wallet.get_new_puzzlehash(), "xch")
-            tx_amount = 15600000
-            # try:
-            #     await client.send_transaction("1", 100000000000000001, addr)
-            #     raise Exception("Should not create high value tx")
-            # except ValueError:
-            #     pass
+            # Setup Initial Balances
+            # Wallet_0 has coinbase only
+            # Wallet_1 has coinbase and received
+            # Wallet_2 has received only
+            ph_0 = await wallet_0.wallet_state_manager.main_wallet.get_new_puzzlehash()
+            ph_1 = await wallet_1.wallet_state_manager.main_wallet.get_new_puzzlehash()
+            ph_2 = await wallet_2.wallet_state_manager.main_wallet.get_new_puzzlehash()
 
-            # Tests sending a basic transaction
-            tx = await client.send_transaction("1", tx_amount, addr)
-            transaction_id = tx.name
+            for i in range(0, num_blocks):
+                await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(ph_0))
 
-            async def tx_in_mempool():
-                tx = await client.get_transaction("1", transaction_id)
-                return tx.is_in_mempool()
+            assert await wallet_0.wallet_state_manager.main_wallet.get_confirmed_balance() > 0
+            # assert await wallet_0.wallet_state_manager.main_wallet.get_confirmed_balance() > 0
 
-            await time_out_assert(5, tx_in_mempool, True)
-            await time_out_assert(5, wallet.get_unconfirmed_balance, initial_funds - tx_amount)
-            assert (await client.get_wallet_balance("1"))["unconfirmed_wallet_balance"] == initial_funds - tx_amount
-            assert (await client.get_wallet_balance("1"))["confirmed_wallet_balance"] == initial_funds
+            bs = await node_client_1.get_blockchain_state()
+            print(bs)
+            assert bs['peak'].height > 0
 
-            for i in range(0, 5):
-                await full_node_api.farm_new_transaction_block(FarmNewBlockProtocol(ph_2))
-
-            async def eventual_balance():
-                return (await client.get_wallet_balance("1"))["confirmed_wallet_balance"]
-
-            await time_out_assert(5, eventual_balance, initial_funds_eventually - tx_amount)
-
-            # Tests offline signing
-            ph_3 = await wallet_node_2.wallet_state_manager.main_wallet.get_new_puzzlehash()
-            ph_4 = await wallet_node_2.wallet_state_manager.main_wallet.get_new_puzzlehash()
-            ph_5 = await wallet_node_2.wallet_state_manager.main_wallet.get_new_puzzlehash()
-
-            # Test basic transaction to one output
-            signed_tx_amount = 888000
-            tx_res: TransactionRecord = await client.create_signed_transaction(
-                [{"amount": signed_tx_amount, "puzzle_hash": ph_3}]
-            )
-
-            assert tx_res.fee_amount == 0
-            assert tx_res.amount == signed_tx_amount
-            assert len(tx_res.additions) == 2  # The output and the change
-            assert any([addition.amount == signed_tx_amount for addition in tx_res.additions])
-
-            push_res = await client_node.push_tx(tx_res.spend_bundle)
-            assert push_res["success"]
-            assert (await client.get_wallet_balance("1"))[
-                "confirmed_wallet_balance"
-            ] == initial_funds_eventually - tx_amount
-
-            for i in range(0, 5):
-                await client.farm_block(encode_puzzle_hash(ph_2, "xch"))
-                await asyncio.sleep(0.5)
-
-            await time_out_assert(5, eventual_balance, initial_funds_eventually - tx_amount - signed_tx_amount)
-
-            # Test transaction to two outputs, from a specified coin, with a fee
-            coin_to_spend = None
-            for addition in tx_res.additions:
-                if addition.amount != signed_tx_amount:
-                    coin_to_spend = addition
-            assert coin_to_spend is not None
-
-            tx_res = await client.create_signed_transaction(
-                [{"amount": 444, "puzzle_hash": ph_4}, {"amount": 999, "puzzle_hash": ph_5}],
-                coins=[coin_to_spend],
-                fee=100,
-            )
-            assert tx_res.fee_amount == 100
-            assert tx_res.amount == 444 + 999
-            assert len(tx_res.additions) == 3  # The outputs and the change
-            assert any([addition.amount == 444 for addition in tx_res.additions])
-            assert any([addition.amount == 999 for addition in tx_res.additions])
-            assert sum([rem.amount for rem in tx_res.removals]) - sum([ad.amount for ad in tx_res.additions]) == 100
-
-            push_res = await client_node.push_tx(tx_res.spend_bundle)
-            assert push_res["success"]
-            for i in range(0, 5):
-                await client.farm_block(encode_puzzle_hash(ph_2, "xch"))
-                await asyncio.sleep(0.5)
-
-                
+            amount = 101
+            nft_data = ("CreatorNFT", "some data")
+            launch_state = [100, 1000] # append ph and pk later
+            royalty = [10]
+            manager = NFTManager(wallet_client_0, node_client_0, "nft_store_test.db")
+            await manager.connect()
+            tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
+            await manager.close()
+            
         finally:
-            # Checks that the RPC manages to stop the node
-            client.close()
-            client_node.close()
-            await client.await_closed()
-            await client_node.await_closed()
-            await rpc_cleanup()
-            await rpc_cleanup_node()
+            await asyncio.sleep(5) # give the ongoing loops a second to finish.
+            await rpc_cleanup_node_0()
+            await rpc_cleanup_node_1()
+            await rpc_cleanup_node_2()
+            await rpc_cleanup_wallet_0()
+            await rpc_cleanup_wallet_1()
+            await rpc_cleanup_wallet_2()
+            wallet_client_0.close()
+            wallet_client_1.close()
+            wallet_client_2.close()
+            node_client_0.close()
+            node_client_1.close()
+            node_client_2.close()
+            await wallet_client_0.await_closed()
+            await wallet_client_1.await_closed()
+            await wallet_client_2.await_closed()
+            await node_client_0.await_closed()
+            await node_client_1.await_closed()
+            await node_client_2.await_closed()
+            
+
+            
+        

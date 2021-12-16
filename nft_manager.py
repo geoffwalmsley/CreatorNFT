@@ -23,7 +23,7 @@ from chia.wallet.puzzles.p2_delegated_puzzle_or_hidden_puzzle import (  # standa
 )
 from chia.util.db_wrapper import DBWrapper
 from chia.full_node.coin_store import CoinStore
-from chia.wallet.derive_keys import master_sk_to_wallet_sk, master_sk_to_singleton_owner_sk, master_sk_to_wallet_sk_unhardened
+from chia.wallet.derive_keys import master_sk_to_wallet_sk, master_sk_to_singleton_owner_sk #, master_sk_to_wallet_sk_unhardened
 from chia.types.coin_spend import CoinSpend
 from chia.wallet.sign_coin_spends import sign_coin_spends
 from chia.wallet.lineage_proof import LineageProof
@@ -52,40 +52,27 @@ LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 
 class NFTManager:
-    def __init__(self, netname="testnet10"):
-        self.netname = netname
+    def __init__(self, wallet_client, node_client, db_name):
+        self.wallet_client = wallet_client
+        self.node_client = node_client
+        self.db_name=db_name
         self.key_dict = {}
-        
 
-    async def connect(self, db_name=None):
-        config = load_config(Path(DEFAULT_ROOT_PATH), 'config.yaml')
-        self.prefix = "txch"
-        if self.netname == "mainnet":
-            self.prefix = "xch"
-        
-        self.AGG_SIG_ME_DATA = bytes.fromhex(config['farmer']['network_overrides']\
-                                             ['constants'][self.netname]\
-                                             ['AGG_SIG_ME_ADDITIONAL_DATA'])
-        rpc_host = config["self_hostname"]
-        full_node_rpc_port = config["full_node"]["rpc_port"]
-        wallet_rpc_port = config["wallet"]["rpc_port"]
-        self.node_client = await FullNodeRpcClient.create(
-            rpc_host, uint16(full_node_rpc_port), Path(DEFAULT_ROOT_PATH), config
-        )
-        self.wallet_client = await WalletRpcClient.create(
-            rpc_host, uint16(wallet_rpc_port), Path(DEFAULT_ROOT_PATH), config
-        )
-        if not db_name:
-            db_name = "nft_store.db"
-        db_filename = Path(db_name)
-        self.connection = await aiosqlite.connect(db_filename)
+    async def connect(self, wallet_index=0):
+        if not self.db_name:
+            self.db_name = "nft_store.db"
+        self.connection = await aiosqlite.connect(Path(self.db_name))
         self.db_wrapper = DBWrapper(self.connection)
         self.nft_wallet = await NFTWallet.create(self.db_wrapper, self.node_client)
-        await self.load_master_sk()
+        self.fingerprints = await self.wallet_client.get_public_keys()
+        fp = self.fingerprints[wallet_index]
+        private_key = await self.wallet_client.get_private_key(fp)
+        sk_data = binascii.unhexlify(private_key['sk'])
+        self.master_sk = PrivateKey.from_bytes(sk_data)
         await self.derive_nft_keys()
         await self.derive_wallet_keys()
         await self.derive_unhardened_keys()
-        
+        await self.nft_wallet.update_to_current_block()
 
     async def close(self):
         if self.node_client:
@@ -96,18 +83,6 @@ class NFTManager:
 
         if self.connection:
             await self.connection.close()
-
-    async def init_db(self):
-        await self.nft_wallet.update_to_current_block()
-            
-
-    async def load_master_sk(self, fp_index=0):
-        self.fingerprints = await self.wallet_client.get_public_keys()
-        fp = self.fingerprints[fp_index]
-        private_key = await self.wallet_client.get_private_key(fp)
-        sk_data = binascii.unhexlify(private_key['sk'])
-        self.master_sk = PrivateKey.from_bytes(sk_data)
-
 
     async def derive_nft_keys(self, index=0):
         if not self.master_sk:
@@ -134,7 +109,8 @@ class NFTManager:
             await self.load_master_sk()
 
         for i in range(n):
-            _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)
+            # _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)
+            _sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i)
             synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
             self.key_dict[bytes(_sk.get_g1())] = _sk
             self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
@@ -145,10 +121,6 @@ class NFTManager:
 
 
     async def choose_std_coin(self, amount):
-        # TODO: setup a puzzle store to match keys and puzzles sensibly
-        if amount > 1e10:
-            raise ValueError("Amount too high, choose a lower amount")
-
         for k in self.key_dict.keys():
             puzzle = puzzle_for_pk(k)
             my_coins = await self.node_client.get_coin_records_by_puzzle_hash(puzzle.get_tree_hash(), include_spent_coins=False)
@@ -181,7 +153,7 @@ class NFTManager:
         sb = await sign_coin_spends(
             [launcher_spend, found_spend, eve_spend],
             self.pk_to_sk,
-            self.AGG_SIG_ME_DATA,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
             DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
         )
 
