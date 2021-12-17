@@ -199,19 +199,37 @@ class TestNFTWallet:
 
             amount = 101
             nft_data = ("CreatorNFT", "some data")
-            launch_state = [100, 1000] # append ph and pk later
+            for_sale_launch_state = [100, 1000] 
+            not_for_sale_launch_state = [90, 1000] 
             royalty = [10]
-            tx_id, launcher_id = await manager_0.launch_nft(amount, nft_data, launch_state, royalty)
+            tx_id, launcher_id = await manager_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
 
             for i in range(0, num_blocks):
                 await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
 
-            c = await manager_1.node_client.get_coin_record_by_name(launcher_id)
-            assert c
+            # Check other managers find for_sale_nfts
+            coins_for_sale_1 = await manager_1.get_for_sale_nfts()
+            coins_for_sale_2 = await manager_2.get_for_sale_nfts()
+            assert coins_for_sale_1[0].launcher_id == launcher_id
+            assert coins_for_sale_2[0].launcher_id == launcher_id
 
+            # Check launched NFT is available on other nodes
+            coin_on_node_1 = await manager_1.node_client.get_coin_record_by_name(launcher_id)
+            coin_on_node_2 = await manager_2.node_client.get_coin_record_by_name(launcher_id)
+            assert coin_on_node_1
+            assert coin_on_node_2
 
+            # launch another NFT, not for sale, and confirm it is not available on other nodes
+            not_for_sale_tx_id, not_for_sale_launcher_id = await manager_0.launch_nft(amount, nft_data, not_for_sale_launch_state, royalty)
+            for i in range(0, num_blocks):
+                await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+            coins_for_sale_1 = await manager_1.get_for_sale_nfts()
+            assert len(coins_for_sale_1) == 1
+
+            # update not-for-sale NFT to for-sale, increase price
             
             
+
             
             await manager_0.close()
             await manager_1.close()

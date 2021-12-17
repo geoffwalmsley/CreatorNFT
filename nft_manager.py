@@ -211,7 +211,7 @@ class NFTManager:
                 my_nfts.append(nft)
         return my_nfts
 
-    async def get_for_sale_nfts(self):
+    async def get_for_sale_nfts(self) -> List[NFT]:
         await self.nft_wallet.update_to_current_block()
         launcher_ids = await self.nft_wallet.get_all_nfts()
         for_sale_nfts = []
