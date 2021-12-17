@@ -15,7 +15,7 @@ from chia.rpc.wallet_rpc_api import WalletRpcApi
 from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.simulator.simulator_protocol import FarmNewBlockProtocol
 from chia.types.peer_info import PeerInfo
-from chia.util.bech32m import encode_puzzle_hash
+from chia.util.bech32m import encode_puzzle_hash, decode_puzzle_hash
 from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.consensus.coinbase import create_puzzlehash_for_pk
 from chia.wallet.derive_keys import master_sk_to_wallet_sk
@@ -42,8 +42,9 @@ class TestNFTWallet:
             yield _
 
             
-    @pytest.mark.asyncio
-    async def test_three(self, three_wallet_nodes, tmp_path):
+    # @pytest.mark.asyncio
+    @pytest.fixture(scope="function")
+    async def three_nft_managers(self, three_wallet_nodes, tmp_path):
         num_blocks = 5
         config = bt.config
         hostname = config["self_hostname"]
@@ -75,7 +76,6 @@ class TestNFTWallet:
         server_2 = full_node_2.server
 
         
-        
         # wallet_0 <-> server_0
         await wallet_server_0.start_client(PeerInfo(self_hostname, uint16(server_0._port)), None)
         # wallet_1 <-> server_1
@@ -84,9 +84,11 @@ class TestNFTWallet:
         await wallet_server_2.start_client(PeerInfo(self_hostname, uint16(server_2._port)), None)
 
         await server_0.start_client(PeerInfo(self_hostname, uint16(server_1._port)))
+        await server_0.start_client(PeerInfo(self_hostname, uint16(server_2._port)))
         await server_1.start_client(PeerInfo(self_hostname, uint16(server_2._port)))
+        await server_1.start_client(PeerInfo(self_hostname, uint16(server_0._port)))
         await server_2.start_client(PeerInfo(self_hostname, uint16(server_0._port)))
-
+        await server_2.start_client(PeerInfo(self_hostname, uint16(server_1._port)))
         
         def stop_node_cb():
             pass
@@ -189,48 +191,10 @@ class TestNFTWallet:
             manager_1 = NFTManager(wallet_client_1, node_client_1, tmp_path/"nft_store_test_1.db")
             manager_2 = NFTManager(wallet_client_2, node_client_2, tmp_path/"nft_store_test_2.db")
 
-            await manager_0.connect()
-            await manager_1.connect()
-            await manager_2.connect()
 
-            bs = await node_client_1.get_blockchain_state()
-            print(bs)
-            assert bs['peak'].height > 0
+            yield (manager_0, manager_1, manager_2, full_node_api_0, full_node_api_1, full_node_api_2)
 
-            amount = 101
-            nft_data = ("CreatorNFT", "some data")
-            for_sale_launch_state = [100, 1000] 
-            not_for_sale_launch_state = [90, 1000] 
-            royalty = [10]
-            tx_id, launcher_id = await manager_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
 
-            for i in range(0, num_blocks):
-                await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
-
-            # Check other managers find for_sale_nfts
-            coins_for_sale_1 = await manager_1.get_for_sale_nfts()
-            coins_for_sale_2 = await manager_2.get_for_sale_nfts()
-            assert coins_for_sale_1[0].launcher_id == launcher_id
-            assert coins_for_sale_2[0].launcher_id == launcher_id
-
-            # Check launched NFT is available on other nodes
-            coin_on_node_1 = await manager_1.node_client.get_coin_record_by_name(launcher_id)
-            coin_on_node_2 = await manager_2.node_client.get_coin_record_by_name(launcher_id)
-            assert coin_on_node_1
-            assert coin_on_node_2
-
-            # launch another NFT, not for sale, and confirm it is not available on other nodes
-            not_for_sale_tx_id, not_for_sale_launcher_id = await manager_0.launch_nft(amount, nft_data, not_for_sale_launch_state, royalty)
-            for i in range(0, num_blocks):
-                await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
-            coins_for_sale_1 = await manager_1.get_for_sale_nfts()
-            assert len(coins_for_sale_1) == 1
-
-            # update not-for-sale NFT to for-sale, increase price
-            
-            
-
-            
             await manager_0.close()
             await manager_1.close()
             await manager_2.close()
@@ -255,7 +219,75 @@ class TestNFTWallet:
             await node_client_0.await_closed()
             await node_client_1.await_closed()
             await node_client_2.await_closed()
-            
 
             
+    @pytest.mark.asyncio
+    async def test_launch_and_find_on_other_nodes(self, three_nft_managers):
+        man_0, man_1, man_2, full_node_api_0 = three_nft_managers
+        await man_0.connect()
+        await man_1.connect()
+        await man_2.connect()
+        amount = 101
+        nft_data = ("CreatorNFT", "some data")
+        for_sale_launch_state = [100, 1000] 
+        not_for_sale_launch_state = [90, 1000] 
+        royalty = [10]
+        tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
+        assert tx_id
+        for i in range(0, 3):
+            await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+        # Check other managers find for_sale_nfts
+        coins_for_sale_1 = await man_1.get_for_sale_nfts()
+        coins_for_sale_2 = await man_2.get_for_sale_nfts()
+        assert coins_for_sale_1[0].launcher_id == launcher_id
+        assert coins_for_sale_2[0].launcher_id == launcher_id
+
+
+    @pytest.mark.asyncio
+    async def test_coin_selection(self, three_nft_managers):
+        man_0, man_1, man_2, full_node_api_0, full_node_api_1, full_node_api_2 = three_nft_managers
+        await man_0.connect()
+        await man_1.connect()
+        await man_2.connect()
+        amount = 100
+        man_0_balance = await man_0.available_balance()
+        assert man_0_balance > 0
+        balance = await man_1.available_balance()
+        assert balance == 0
+        balance = await man_2.available_balance()
+        assert balance == 0
+
+        # send 1xch from man_0 to man_1
+        man_1_addr = await man_1.wallet_client.get_next_address(1, False)
+        man_0_addr = await man_0.wallet_client.get_next_address(1, False)
+
+        tx = await man_0.wallet_client.send_transaction("1", int(1e12), man_1_addr)
+        tx_id = tx.name
+
+        async def tx_in_mempool():
+                tx = await man_0.wallet_client.get_transaction("1", tx_id)
+                return tx.is_in_mempool()
+
+        await time_out_assert(5, tx_in_mempool, True)
+
+        assert (await man_0.wallet_client.get_wallet_balance("1"))["unconfirmed_wallet_balance"] == man_0_balance - int(1e12)
+  
+        man_0_balance = (await man_0.wallet_client.get_wallet_balance("1"))["confirmed_wallet_balance"]
+        print(man_0_balance)
+        
+        async def eventual_balance():
+            return (await man_0.wallet_client.get_wallet_balance("1"))["confirmed_wallet_balance"]
+        for i in range(0, 5):
+            await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(decode_puzzle_hash(man_0_addr)))
+
+        async def tx_confirmed():
+            tx = await man_0.wallet_client.get_transaction("1", tx_id)
+            return tx.confirmed
+
+        await time_out_assert(10, tx_confirmed, True)
+        txns = await man_1.wallet_client.get_transactions("1")
+        print(txns)
+        
+        assert await man_1.available_balance() == int(1e12)
+
         

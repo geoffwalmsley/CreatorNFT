@@ -118,8 +118,14 @@ class NFTManager:
     async def pk_to_sk(self, pk):
         return self.key_dict.get(bytes(pk))
 
+    async def available_balance(self) -> int:
+        balance_data = await self.wallet_client.get_wallet_balance(1)
+        return balance_data['confirmed_wallet_balance']
 
-    async def choose_std_coin(self, amount):
+
+    async def choose_std_coin(self, amount: int) -> Tuple[Coin, Program]:
+        # check that wallet_balance is greater than amount
+        assert await self.available_balance() > amount
         for k in self.key_dict.keys():
             puzzle = puzzle_for_pk(k)
             my_coins = await self.node_client.get_coin_records_by_puzzle_hash(puzzle.get_tree_hash(), include_spent_coins=False)
