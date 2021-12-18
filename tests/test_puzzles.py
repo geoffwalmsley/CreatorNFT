@@ -205,6 +205,7 @@ class TestCreatorNft:
         key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
         state = [100, 1000, alice.puzzle_hash, alice.pk_]
         royalty = [alice.puzzle_hash, 25]
+        fee = 20
 
         found_coin = await alice.choose_coin(amount)
         found_coin_puzzle = puzzle_for_pk(alice.pk_)
@@ -274,6 +275,7 @@ class TestCreatorNft:
         key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
         state = [100, 1000, alice.puzzle_hash, alice.pk_]
         royalty = [alice.puzzle_hash, 25]
+        fee = 20
 
         found_coin = await alice.choose_coin(amount)
         found_coin_puzzle = puzzle_for_pk(alice.pk_)
@@ -331,28 +333,385 @@ class TestCreatorNft:
         print(res)
         assert res['additions']
 
-        
-
-
 
     @pytest.mark.asyncio
-    async def test_lifecycle(self, node, alice, bob, carol):
-        """The test process is:
-        Launch nnft with unlocked state, and do eve spend during the launch to make
-        the current puzzle state discovreable from the last_spend solution
-        Purchase by bob, recurried to locked state with bobs creds, both payments to alice
-        Attempted purchase by carol should fail (assert for sale state is not 100)
-        bob update to for sale (assert for sale state is 100)
-        carol purchase - royalty accrues to alice, payment goes to bob
-        """
+    async def test_launch_and_buy(self, node, alice, bob):
         amount = 101
-        nft_data = ("CreatorNFT", ["v0.1", "other data", "three"])
-        launch_state = [100, 1000, alice.puzzle_hash, alice.pk_]
-        royalty = [alice.puzzle_hash, 0]
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [10, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 25]
 
         found_coin = await alice.choose_coin(amount)
         found_coin_puzzle = puzzle_for_pk(alice.pk_)
         launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
 
-        # Launcher Spend
-     
+        launcher_spend = driver.make_launcher_spend(found_coin, amount, state, royalty, key_value_list)
+        found_spend = driver.make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
+        eve_spend = driver.make_eve_spend(state, royalty, launcher_spend)
+
+        sb = await sign_coin_spends(
+            [launcher_spend, found_spend, eve_spend],
+            alice.pk_to_sk,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+        )
+
+        res = await node.push_tx(sb)
+        assert res['additions']
+
+        price = 1000
+        payment_coin = await bob.choose_coin(amount)
+        payment_coin_puzzle = puzzle_for_pk(bob.pk_)
+
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name()))
+
+        nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
+
+        new_state = [0, 10202, bob.puzzle_hash, bob.pk_]
+
+        nft_spend, p2_spend, payment_spend = driver.make_buy_spend(nft, new_state, payment_coin, payment_coin_puzzle)
+
+        sb = await sign_coin_spends(
+            [nft_spend, p2_spend, payment_spend],
+            bob.pk_to_sk,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+        )
+
+        res = await node.push_tx(sb)
+        assert res['additions']
+
+
+        # buy a not-for-sale
+    @pytest.mark.asyncio
+    async def test_buy_not_for_sale(self, node, alice, bob):
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [0, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 25]
+
+        found_coin = await alice.choose_coin(amount)
+        found_coin_puzzle = puzzle_for_pk(alice.pk_)
+        launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
+
+        launcher_spend = driver.make_launcher_spend(found_coin, amount, state, royalty, key_value_list)
+        found_spend = driver.make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
+        eve_spend = driver.make_eve_spend(state, royalty, launcher_spend)
+
+        sb = await sign_coin_spends(
+            [launcher_spend, found_spend, eve_spend],
+            alice.pk_to_sk,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+        )
+
+        res = await node.push_tx(sb)
+        assert res['additions']
+
+        price = 1000
+        payment_coin = await bob.choose_coin(amount)
+        payment_coin_puzzle = puzzle_for_pk(bob.pk_)
+
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name()))
+
+        nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
+
+        new_state = [0, 10202, bob.puzzle_hash, bob.pk_]
+
+        old_state, royalty = driver.uncurry_state_and_royalty(nft.last_spend.puzzle_reveal.to_program())
+        current_state = driver.uncurry_solution(nft.last_spend.solution.to_program())
+        args = [INNER_MOD.get_tree_hash(), current_state, royalty]
+
+        current_inner_puzzle = INNER_MOD.curry(*args)
+        current_singleton_puzzle = SINGLETON_MOD.curry(
+            (SINGLETON_MOD_HASH, (nft.launcher_id, LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
+            )
+    
+        assert current_singleton_puzzle.get_tree_hash() == nft.puzzle_hash
+        # assert nft.state()[0] != int_to_bytes(0) # is for sale
+
+        price = int_from_bytes(nft.state()[1])
+
+        p2_puzzle = P2_MOD.curry(SINGLETON_MOD_HASH, nft.launcher_id, LAUNCHER_PUZZLE_HASH)
+        p2_coin = Coin(payment_coin.name(), p2_puzzle.get_tree_hash(), price)
+
+        r = nft.last_spend.puzzle_reveal.to_program().uncurry()
+        if r is not None:
+            _, args = r
+            _, inner_puzzle = list(args.as_iter())
+            inner_puzzle_hash = inner_puzzle.get_tree_hash()
+
+        lineage_proof = LineageProof(nft.last_spend.coin.parent_coin_info, inner_puzzle_hash, nft.amount)
+
+        # lineage_proof = singleton_top_layer.lineage_proof_for_coinsol(nft.last_spend)
+
+        inner_solution = [new_state, p2_coin.name(), 0]
+        singleton_solution = singleton_top_layer.solution_for_singleton(lineage_proof, nft.as_coin().amount, inner_solution)
+
+        # conds = driver.run_singleton(current_singleton_puzzle, singleton_solution)
+        # print(conds)
+
+        p2_solution = Program.to([current_inner_puzzle.get_tree_hash(), p2_coin.name(), new_state])
+        delegated_cond = [
+            [ConditionOpcode.CREATE_COIN, p2_puzzle.get_tree_hash(), price],
+            [ConditionOpcode.CREATE_COIN, payment_coin_puzzle.get_tree_hash(), payment_coin.amount - price],
+        ]
+        delegated_puz = Program.to((1, delegated_cond))
+        delegated_sol = Program.to([[], delegated_puz, []])
+        # make coin spends
+        nft_spend = CoinSpend(nft.as_coin(), current_singleton_puzzle, singleton_solution)
+        p2_spend = CoinSpend(p2_coin, p2_puzzle, p2_solution)
+        payment_spend = CoinSpend(payment_coin, payment_coin_puzzle, delegated_sol)
+        
+        with pytest.raises(ValueError, match=r"Sign transaction failed*") as e:
+            sb = await sign_coin_spends(
+                [nft_spend, p2_spend, payment_spend],
+                bob.pk_to_sk,
+                DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+            )
+
+
+    @pytest.mark.asyncio
+    async def test_multiple_buys_and_updates(self, node, alice, bob, carol):
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [1, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 25]
+
+        async def launch(wallet, amount, state, royalty, key_value_list):
+            found_coin = await wallet.choose_coin(amount)
+            found_coin_puzzle = puzzle_for_pk(wallet.pk_)
+            launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
+            launcher_spend = driver.make_launcher_spend(found_coin, amount, state, royalty, key_value_list)
+            found_spend = driver.make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
+            eve_spend = driver.make_eve_spend(state, royalty, launcher_spend)
+
+            sb = await sign_coin_spends(
+                [launcher_spend, found_spend, eve_spend],
+                wallet.pk_to_sk,
+                DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+            )
+
+            res = await node.push_tx(sb)
+            return (res, eve_spend, launcher_coin)
+
+
+        res, eve_spend, launcher_coin = await launch(alice, amount, state, royalty, key_value_list)
+        assert res['additions']
+
+
+        async def buy(wallet, nft, new_state):
+            payment_coin = await wallet.choose_coin(nft.price())
+            payment_coin_puzzle = puzzle_for_pk(wallet.pk_)
+            nft_spend, p2_spend, payment_spend = driver.make_buy_spend(nft, new_state, payment_coin, payment_coin_puzzle)
+            sb = await sign_coin_spends(
+                [nft_spend, p2_spend, payment_spend],
+                wallet.pk_to_sk,
+                DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+            )
+
+            res = await node.push_tx(sb)
+            return (res, nft_spend)
+
+
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
+        new_state = [0, 1001, bob.puzzle_hash, bob.pk_]
+        res, nft_spend = await buy(bob, nft, new_state)
+        assert res['additions']
+
+        async def update(wallet, nft, new_state):
+            update_spend = driver.make_update_spend(nft, new_state)
+
+            sb = await sign_coin_spends(
+                [update_spend],
+                wallet.pk_to_sk,
+                DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+            )
+
+            res = await node.push_tx(sb)
+            return (res, update_spend)
+
+        # Bob updates to for sale, and price to 10000
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name()))
+
+        nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
+        new_state = [10, 10000, bob.puzzle_hash, bob.pk_]
+        res, update_spend = await update(bob, nft, new_state)
+        assert res['additions']
+
+        # Carol buys off bob
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == update_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, update_spend, key_value_list, royalty)
+        new_state = [10, 387350000, carol.puzzle_hash, carol.pk_]
+        res, nft_spend = await buy(carol, nft, new_state)
+        assert res['additions']
+
+
+        # Alice buys off carol
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
+        new_state = [0, 100, alice.puzzle_hash, alice.pk_]
+        res, nft_spend = await buy(alice, nft, new_state)
+        assert res['additions']
+
+        # Alice updates 
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name()))
+
+        nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
+        new_state = [10, 10000, alice.puzzle_hash, alice.pk_]
+        res, nft_spend = await update(alice, nft, new_state)
+        assert res['additions']
+
+        # carol buys
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
+        new_state = [10, 387350000, carol.puzzle_hash, carol.pk_]
+        res, nft_spend = await buy(carol, nft, new_state)
+        assert res['additions']
+
+        # carol upadtes
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
+        new_state = [0, 3800000, carol.puzzle_hash, carol.pk_]
+        res, nft_spend = await update(carol, nft, new_state)
+        assert res['additions']
+
+
+        # buy a zero royalty
+
+        # buy a 100 royalty
+
+    @pytest.mark.asyncio
+    async def test_zero_or_100_royalty(self, node, alice, bob, carol):
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [1, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 0]
+
+        async def launch(wallet, amount, state, royalty, key_value_list):
+            found_coin = await wallet.choose_coin(amount)
+            found_coin_puzzle = puzzle_for_pk(wallet.pk_)
+            launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
+            launcher_spend = driver.make_launcher_spend(found_coin, amount, state, royalty, key_value_list)
+            found_spend = driver.make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
+            eve_spend = driver.make_eve_spend(state, royalty, launcher_spend)
+
+            sb = await sign_coin_spends(
+                [launcher_spend, found_spend, eve_spend],
+                wallet.pk_to_sk,
+                DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+            )
+
+            res = await node.push_tx(sb)
+            return (res, eve_spend, launcher_coin)
+
+
+        
+
+        async def buy(wallet, nft, new_state):
+            payment_coin = await wallet.choose_coin(nft.price())
+            payment_coin_puzzle = puzzle_for_pk(wallet.pk_)
+            nft_spend, p2_spend, payment_spend = driver.make_buy_spend(nft, new_state, payment_coin, payment_coin_puzzle)
+            sb = await sign_coin_spends(
+                [nft_spend, p2_spend, payment_spend],
+                wallet.pk_to_sk,
+                DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+            )
+
+            res = await node.push_tx(sb)
+            return (res, nft_spend)
+
+
+        async def update(wallet, nft, new_state):
+            update_spend = driver.make_update_spend(nft, new_state)
+
+            sb = await sign_coin_spends(
+                [update_spend],
+                wallet.pk_to_sk,
+                DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+                DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+            )
+
+            res = await node.push_tx(sb)
+            return (res, update_spend)
+
+
+
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [1, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 0]
+        
+        # Launch
+        res, eve_spend, launcher_coin = await launch(alice, amount, state, royalty, key_value_list)
+        assert res['additions']
+
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
+        new_state = [0, 1001, bob.puzzle_hash, bob.pk_]
+        res, nft_spend = await buy(bob, nft, new_state)
+        assert res['additions']
+
+
+        # Bob updates to for sale, and price to 10000
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name()))
+
+        nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
+        new_state = [10, 10000, bob.puzzle_hash, bob.pk_]
+        res, update_spend = await update(bob, nft, new_state)
+        assert res['additions']
+
+        # Carol buys off bob
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == update_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, update_spend, key_value_list, royalty)
+        new_state = [10, 387350000, carol.puzzle_hash, carol.pk_]
+        res, nft_spend = await buy(carol, nft, new_state)
+        assert res['additions']
+
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [1, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 100]
+
+        # Launch with 100
+        res, eve_spend, launcher_coin = await launch(alice, amount, state, royalty, key_value_list)
+        assert res['additions']
+
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
+        new_state = [0, 1001, bob.puzzle_hash, bob.pk_]
+        res, nft_spend = await buy(bob, nft, new_state)
+        assert res['additions']
+
+
+        # Bob updates to for sale, and price to 10000
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name()))
+
+        nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
+        new_state = [10, 10000, bob.puzzle_hash, bob.pk_]
+        res, update_spend = await update(bob, nft, new_state)
+        assert res['additions']
+
+        # Carol buys off bob
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == update_spend.coin.name()))
+        
+        nft = NFT(launcher_coin.name(), nft_coin, update_spend, key_value_list, royalty)
+        new_state = [10, 387350000, carol.puzzle_hash, carol.pk_]
+        res, nft_spend = await buy(carol, nft, new_state)
+        assert res['additions']
+

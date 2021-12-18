@@ -1,4 +1,4 @@
-(mod (MOD_HASH STATE ROYALTY Truths new_state payment_info fee)
+(mod (MOD_HASH STATE ROYALTY Truths new_state payment_info)
 
      
 
@@ -24,26 +24,27 @@
      )
 
      (defun-inline creator_amt (STATE ROYALTY)
-
-	 (if (f (r ROYALTY))
-	     (f (divmod (f (r STATE))
-	                (f (divmod 100
-			           (f (r ROYALTY))))))
-	     (q . 0)
+     	 (if (f (r ROYALTY))
+	     (f (divmod (* (f (r STATE)) (f (r ROYALTY))) 100))
+	     (q .0)
 	 )
+	 ;; (if (f (r ROYALTY))
+	 ;;     (f (divmod (f (r STATE))
+	 ;;                (f (divmod 100
+	 ;; 		           (f (r ROYALTY))))))
+	 ;;     (q . 0)
+	 ;; )
      )
 
 
      ;; UPDATE STATE
-     (defun update_state (MOD_HASH STATE ROYALTY my_amount new_state fee)
+     (defun update_state (MOD_HASH STATE ROYALTY my_amount new_state)
          (list
 	       (list CREATE_COIN
 	             (new_puzzle_hash MOD_HASH
 		                      ROYALTY
 				      new_state)
 		     my_amount)
-
-	       (list RESERVE_FEE fee)
 
 	       (list AGG_SIG_ME
 	             (f (r (r (r STATE))))
@@ -57,7 +58,7 @@
 			my_amount
 			new_state
 			payment_info
-			fee)
+			)
 
 
          (list
@@ -78,7 +79,6 @@
 	             (f ROYALTY)
 		     (creator_amt STATE ROYALTY))
 
-	       (list RESERVE_FEE fee)			;; Pay fees
 
 	       (list CREATE_PUZZLE_ANNOUNCEMENT		;; Announce the p2 coin id
 	             payment_info)
@@ -96,21 +96,38 @@
     ;; ---------------------------------------------------------------------------
     ;; MAIN
 
+    ;; (if payment_info
+    ;; 	(trade_coin MOD_HASH
+    ;;                     STATE
+    ;; 			ROYALTY	
+    ;; 		        (my_amount_truth Truths)
+    ;;   		        new_state
+    ;; 		        payment_info
+    ;; 			)
+    ;;     (update_state MOD_HASH
+    ;; 		      STATE
+    ;; 		      ROYALTY
+    ;; 		      (my_amount_truth Truths)
+    ;; 		      new_state
+    ;; 		      ))
+
+
+
     (if payment_info
-    	(if (f STATE)
+	(if (f STATE)
 	    (trade_coin MOD_HASH
                         STATE
 			ROYALTY	
 		        (my_amount_truth Truths)
       		        new_state
 		        payment_info
-			fee)
-	    (x))
+			)
+	    (x "not for sale"))
         (update_state MOD_HASH
 		      STATE
 		      ROYALTY
 		      (my_amount_truth Truths)
 		      new_state
-		      fee))
+		      ))
 		      
 )

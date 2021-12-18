@@ -100,8 +100,7 @@ def make_launcher_spend(found_coin: Coin, amount: int, state: List, royalty: Lis
 
 
 def make_found_spend(
-    found_coin: Coin, found_coin_puzzle: Program, launcher_coin_spend: CoinSpend, amount: int
-) -> CoinSpend:
+    found_coin: Coin, found_coin_puzzle: Program, launcher_coin_spend: CoinSpend, amount: int) -> CoinSpend:
     launcher_announcement = Announcement(launcher_coin_spend.coin.name(), launcher_coin_spend.solution.get_tree_hash())
 
     conditions = [
@@ -127,7 +126,7 @@ def make_eve_spend(state: List, royalty: List, launcher_spend: CoinSpend):
 
     assert full_puzzle.get_tree_hash() == eve_coin.puzzle_hash
 
-    eve_solution = [state, [], []] # [state, pmt_id, fee]
+    eve_solution = [state, [], 0] # [state, pmt_id, fee]
     eve_proof = LineageProof(launcher_spend.coin.parent_coin_info,
                              None,
                              launcher_spend.coin.amount)
@@ -162,7 +161,6 @@ def make_buy_spend(nft: NFT, new_state, payment_coin, payment_coin_puzzle):
     old_state, royalty = uncurry_state_and_royalty(nft.last_spend.puzzle_reveal.to_program())
     current_state = uncurry_solution(nft.last_spend.solution.to_program())
     args = [INNER_MOD.get_tree_hash(), current_state, royalty]
-    print(royalty)
 
     current_inner_puzzle = INNER_MOD.curry(*args)
     current_singleton_puzzle = SINGLETON_MOD.curry(
@@ -170,13 +168,25 @@ def make_buy_spend(nft: NFT, new_state, payment_coin, payment_coin_puzzle):
     )
     
     assert current_singleton_puzzle.get_tree_hash() == nft.puzzle_hash
-    assert nft.state()[0] == int_to_bytes(100)
+    assert nft.state()[0] != int_to_bytes(0) # is for sale
 
     price = int_from_bytes(nft.state()[1])
     
     p2_puzzle = P2_MOD.curry(SINGLETON_MOD_HASH, nft.launcher_id, LAUNCHER_PUZZLE_HASH)
     p2_coin = Coin(payment_coin.name(), p2_puzzle.get_tree_hash(), price)
-    lineage_proof = singleton_top_layer.lineage_proof_for_coinsol(nft.last_spend)
+
+    r = nft.last_spend.puzzle_reveal.to_program().uncurry()
+    if r is not None:
+        _, args = r
+        _, inner_puzzle = list(args.as_iter())
+        inner_puzzle_hash = inner_puzzle.get_tree_hash()
+
+
+
+    lineage_proof = LineageProof(nft.last_spend.coin.parent_coin_info, inner_puzzle_hash, nft.amount)
+
+    # lineage_proof = singleton_top_layer.lineage_proof_for_coinsol(nft.last_spend)
+
     inner_solution = [new_state, p2_coin.name()]
     singleton_solution = singleton_top_layer.solution_for_singleton(lineage_proof, nft.as_coin().amount, inner_solution)
 
@@ -224,7 +234,4 @@ def make_update_spend(nft: NFT, new_state):
         lineage_proof, nft.as_coin().amount, inner_solution
     )
 
-    conds = run_singleton(current_singleton_puzzle, singleton_solution)
-    print(nft.as_coin().name())
-    print(conds)
     return CoinSpend(nft.as_coin(), current_singleton_puzzle, singleton_solution)
