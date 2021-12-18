@@ -16,7 +16,7 @@ from chia.wallet.puzzles.p2_delegated_puzzle_or_hidden_puzzle import (  # standa
     calculate_synthetic_secret_key,
     DEFAULT_HIDDEN_PUZZLE_HASH,
 )
-
+from chia.types.announcement import Announcement
 from chia.wallet.derive_keys import master_sk_to_wallet_sk
 from chia.types.coin_spend import CoinSpend
 from chia.wallet.sign_coin_spends import sign_coin_spends
@@ -24,21 +24,23 @@ from chia.wallet.lineage_proof import LineageProof
 from chia.wallet.puzzles import singleton_top_layer
 from chia.types.announcement import Announcement
 
+from clvm.EvalError import EvalError
+
 from CreatorNFT.sim import load_clsp_relative
 from CreatorNFT.sim import setup_node_only
-from CreatorNFT.driver import make_launcher_spend, make_found_spend, make_eve_spend, make_buy_spend, make_update_spend
+import CreatorNFT.driver as driver
 from CreatorNFT.nft_wallet import NFT
 
 
 SINGLETON_MOD = load_clvm("singleton_top_layer.clvm")
 SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
-LAUNCHER_PUZZLE = load_clvm("singleton_launcher.clvm")
+LAUNCHER_PUZZLE = load_clsp_relative("clsp/nft_launcher.clsp")
 LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 ESCAPE_VALUE = -113
 MELT_CONDITION = [ConditionOpcode.CREATE_COIN, 0, ESCAPE_VALUE]
 
-INNER_MOD = load_clsp_relative("clsp/singleton_payer.clsp")
+INNER_MOD = load_clsp_relative("clsp/nft_with_fee.clsp")
 P2_MOD = load_clsp_relative("clsp/p2_singleton_payer.clsp")
 
 
@@ -73,10 +75,265 @@ async def carol(node):
 class TestCreatorNft:
     @pytest.mark.asyncio
     async def test_clsp_compile(self):
-        singleton = load_clsp_relative("clsp/singleton_payer.clsp")
+        launcher = load_clsp_relative("clsp/nft_launcher.clsp")
+        singleton = load_clsp_relative("clsp/nft_with_fee.clsp")
         p2 = load_clsp_relative("clsp/p2_singleton_payer.clsp")
+        assert launcher
         assert singleton
         assert p2
+
+    @pytest.mark.asyncio
+    async def test_launcher_puzzle(self, node, alice):
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [100, 1000, alice.puzzle_hash, alice.pk_]
+        royalty_good = [alice.puzzle_hash, 25]
+        royalty_neg = [alice.puzzle_hash, -1]
+        royalty_big = [alice.puzzle_hash, 101]
+        
+        found_coin = await alice.choose_coin(amount)
+        found_coin_puzzle = puzzle_for_pk(alice.pk_)
+        launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
+
+        # TEST GOOD ROYALTY
+        args = [INNER_MOD.get_tree_hash(), state, royalty_good]
+        curried = INNER_MOD.curry(*args)
+        full_puzzle = SINGLETON_MOD.curry((SINGLETON_MOD_HASH,
+                                           (launcher_coin.name(), LAUNCHER_PUZZLE_HASH)),
+                                           curried)
+        nft_full_puzzle_hash = full_puzzle.get_tree_hash()
+        launcher_id = launcher_coin.name()
+
+        solution = Program.to([full_puzzle.get_tree_hash(),
+                               SINGLETON_MOD_HASH,
+                               launcher_id,
+                               LAUNCHER_PUZZLE_HASH,
+                               INNER_MOD.get_tree_hash(),
+                               state,
+                               royalty_good,
+                               amount,
+                               key_value_list])
+        
+        conds = LAUNCHER_PUZZLE.run(solution)
+        assert conds.as_python()[0][1] == nft_full_puzzle_hash
+
+        
+        # TEST NEGATIVE ROYALTY
+        args = [INNER_MOD.get_tree_hash(), state, royalty_neg]
+        curried = INNER_MOD.curry(*args)
+        full_puzzle = SINGLETON_MOD.curry((SINGLETON_MOD_HASH,
+                                           (launcher_coin.name(), LAUNCHER_PUZZLE_HASH)),
+                                           curried)
+        nft_full_puzzle_hash = full_puzzle.get_tree_hash()
+        launcher_id = launcher_coin.name()
+
+        solution = Program.to([full_puzzle.get_tree_hash(),
+                               SINGLETON_MOD_HASH,
+                               launcher_id,
+                               LAUNCHER_PUZZLE_HASH,
+                               INNER_MOD.get_tree_hash(),
+                               state,
+                               royalty_neg,
+                               amount,
+                               key_value_list])
+
+        with pytest.raises(EvalError) as e:
+            conds = LAUNCHER_PUZZLE.run(solution)
+
+        sexp = e.value._sexp
+        p = Program.to(sexp)
+        msg = p.first().as_python()
+        assert msg == b'royalty < 0'
+
+        # TEST > 100 ROYALTY
+        args = [INNER_MOD.get_tree_hash(), state, royalty_big]
+        curried = INNER_MOD.curry(*args)
+        full_puzzle = SINGLETON_MOD.curry((SINGLETON_MOD_HASH,
+                                           (launcher_coin.name(), LAUNCHER_PUZZLE_HASH)),
+                                           curried)
+        nft_full_puzzle_hash = full_puzzle.get_tree_hash()
+        launcher_id = launcher_coin.name()
+
+        solution = Program.to([full_puzzle.get_tree_hash(),
+                               SINGLETON_MOD_HASH,
+                               launcher_id,
+                               LAUNCHER_PUZZLE_HASH,
+                               INNER_MOD.get_tree_hash(),
+                               state,
+                               royalty_big,
+                               amount,
+                               key_value_list])
+
+        with pytest.raises(EvalError) as e:
+            conds = LAUNCHER_PUZZLE.run(solution)
+
+        sexp = e.value._sexp
+        p = Program.to(sexp)
+        msg = p.first().as_python()
+        assert msg == b'royalty > 100'
+
+        # TEST LAUNCH TO DODGY PUZHASH
+        args = [INNER_MOD.get_tree_hash(), state, royalty_good]
+        curried = INNER_MOD.curry(*args)
+        full_puzzle = SINGLETON_MOD.curry((SINGLETON_MOD_HASH,
+                                           (launcher_coin.name(), LAUNCHER_PUZZLE_HASH)),
+                                           curried)
+        nft_full_puzzle_hash = full_puzzle.get_tree_hash()
+        launcher_id = launcher_coin.name()
+
+        solution = Program.to([bytes(b"a" * 32),
+                               SINGLETON_MOD_HASH,
+                               launcher_id,
+                               LAUNCHER_PUZZLE_HASH,
+                               INNER_MOD.get_tree_hash(),
+                               state,
+                               royalty_good,
+                               amount,
+                               key_value_list])
+
+        with pytest.raises(EvalError) as e:
+            conds = LAUNCHER_PUZZLE.run(solution)
+
+        sexp = e.value._sexp
+        p = Program.to(sexp)
+        msg = p.first().as_python()
+        assert msg == b'incorrect inner puzzle'        
+    
+    @pytest.mark.asyncio
+    async def test_launcher_spend(self, node, alice):
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [100, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 25]
+
+        found_coin = await alice.choose_coin(amount)
+        found_coin_puzzle = puzzle_for_pk(alice.pk_)
+        launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
+
+        args = [INNER_MOD.get_tree_hash(), state, royalty]
+        curried = INNER_MOD.curry(*args)
+        full_puzzle = SINGLETON_MOD.curry((SINGLETON_MOD_HASH,
+                                           (launcher_coin.name(), LAUNCHER_PUZZLE_HASH)),
+                                           curried)
+        nft_full_puzzle_hash = full_puzzle.get_tree_hash()
+
+        # MAKE THE LAUNCHER SPEND
+        launcher_spend = driver.make_launcher_spend(found_coin, amount, state, royalty, key_value_list)
+        puz = launcher_spend.puzzle_reveal.to_program()
+        sol = launcher_spend.solution.to_program()
+        conds = driver.run_singleton(puz, sol)
+
+        # Assert that the create_coin puzzlehash is what we expect
+        assert conds[0][1] == nft_full_puzzle_hash
+
+        # make the found spend
+        found_spend = driver.make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
+
+        found_conds = driver.run_singleton(found_spend.puzzle_reveal.to_program(),
+                                           found_spend.solution.to_program())
+
+        print(type(found_conds[1][1]))
+        print(type(std_hash(launcher_coin.name() + conds[1][1])))
+        
+        # Assert the coin announcements match
+        assert hexstr_to_bytes(found_conds[1][1]) == std_hash(launcher_coin.name() + conds[1][1])
+
+        eve_spend = driver.make_eve_spend(state, royalty, launcher_spend)
+
+        puz = eve_spend.puzzle_reveal.to_program()
+        sol = eve_spend.solution.to_program()
+        conds = driver.run_singleton(puz, sol)
+        
+        # assert the output puzzlehash of eve spend.
+        print(conds)
+        next_ph = conds[1][1]
+        args = [INNER_MOD.get_tree_hash(), state, royalty]
+        curried = INNER_MOD.curry(*args)
+        full_puzzle = SINGLETON_MOD.curry((SINGLETON_MOD_HASH,
+                                           (launcher_coin.name(), LAUNCHER_PUZZLE_HASH)),
+                                           curried)
+        print(next_ph)
+        print(full_puzzle.get_tree_hash())
+        assert full_puzzle.get_tree_hash() == next_ph
+        
+        sb = await sign_coin_spends(
+            [launcher_spend, found_spend, eve_spend],
+            alice.pk_to_sk,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+        )
+
+        res = await node.push_tx(sb)
+        print(res)
+        assert res['additions']
+
+        
+    @pytest.mark.asyncio
+    async def test_update_spend(self, node, alice, bob):
+        amount = 101
+        key_value_list = ("CreatorNFT", ["v0.1", "other data", "three"])
+        state = [100, 1000, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, 25]
+
+        found_coin = await alice.choose_coin(amount)
+        found_coin_puzzle = puzzle_for_pk(alice.pk_)
+        launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
+
+        launcher_spend = driver.make_launcher_spend(found_coin, amount, state, royalty, key_value_list)
+        found_spend = driver.make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
+        eve_spend = driver.make_eve_spend(state, royalty, launcher_spend)
+
+        sb = await sign_coin_spends(
+            [launcher_spend, found_spend, eve_spend],
+            alice.pk_to_sk,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+        )
+
+        res = await node.push_tx(sb)
+        assert res['additions']
+
+        # make update spend
+        nft_coin = next(c for c in res['additions'] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name()))
+        print(nft_coin)
+        nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
+
+        new_state = [0, 10202, alice.puzzle_hash, alice.pk_]
+        update_spend = driver.make_update_spend(nft, new_state)
+
+        sb = await sign_coin_spends(
+            [update_spend],
+            alice.pk_to_sk,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+        )
+
+        res = await node.push_tx(sb)
+        assert res['additions']
+
+        # update again to ensure lineage proof is right
+        assert len(res['additions']) == 1
+
+        nft_coin = res['additions'][0]
+        nft = NFT(launcher_coin.name(), nft_coin, update_spend, key_value_list, royalty)
+
+        new_state = [100, 10202, alice.puzzle_hash, alice.pk_]
+        update_spend_2 = driver.make_update_spend(nft, new_state)
+
+        sb = await sign_coin_spends(
+            [update_spend_2],
+            alice.pk_to_sk,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
+            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
+        )
+
+        res = await node.push_tx(sb)
+        print(res)
+        assert res['additions']
+
+        
+
+
 
     @pytest.mark.asyncio
     async def test_lifecycle(self, node, alice, bob, carol):
@@ -91,285 +348,11 @@ class TestCreatorNft:
         amount = 101
         nft_data = ("CreatorNFT", ["v0.1", "other data", "three"])
         launch_state = [100, 1000, alice.puzzle_hash, alice.pk_]
-        royalty = [alice.puzzle_hash, 10]
-        found_coin = await alice.choose_coin(amount)
-        found_coin_puzzle = puzzle_for_pk(alice.pk_)
-        launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
-
-        # Launcher Spend
-        launcher_spend = make_launcher_spend(found_coin, amount, launch_state, royalty, nft_data)
-        found_spend = make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
-        eve_spend = make_eve_spend(launch_state, royalty, launcher_spend)
-
-        sb = await sign_coin_spends(
-            [launcher_spend, found_spend, eve_spend],
-            alice.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-
-        res = await node.push_tx(sb)
-        assert res["additions"]
-        assert res["removals"]
-
-        nft_coin_record = await node.sim_client.get_coin_records_by_parent_ids([eve_spend.coin.name()])
-        nft_coin = nft_coin_record[0].coin
-
-        # Purchase Spend
-        new_state = [0, 0, bob.puzzle_hash, bob.pk_]
-        price = 1000
-        payment_coin = await bob.choose_coin(price)
-        payment_coin_puzzle = puzzle_for_pk(bob.pk_)
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_record[0].confirmed_block_index
-        )
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle
-        )
-
-        sb = await sign_coin_spends(
-            [nft_spend, p2_spend, payment_spend],
-            bob.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-        alice_pre_balance = alice.balance()
-        bob_pre_balance = bob.balance()
-
-        res_2 = await node.push_tx(sb)
-        assert res_2["additions"]
-        assert res_2["removals"]
-
-        # assert alice has been paid
-        assert alice_pre_balance + price == alice.balance()
-        assert bob_pre_balance - price == bob.balance()
-
-        # assert latest amount in nft is unchanged
-        nft_coin_record = await node.sim_client.get_coin_records_by_parent_ids([nft_coin.name()])
-        assert len(nft_coin_record) == 3
-        nft_coin_record = next(r for r in nft_coin_record if r.coin.amount == nft_coin.amount)
-        assert not nft_coin_record.spent
-        nft_coin = nft_coin_record.coin
-
-        # assert that the current state is not for sale
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_record.confirmed_block_index
-        )
-        p, _ = last_spend.solution.to_program().uncurry()
-
-        state = p.as_python()[-1][0]
-        assert int_from_bytes(state[0]) != 100
-
-        # bob updates state to for sale
-        new_state = [100, 1200, bob.puzzle_hash, bob.pk_]
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_record.confirmed_block_index
-        )
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-        
-        update_spend = make_update_spend(nft, new_state)
-
-        sb = await sign_coin_spends(
-            [update_spend],
-            bob.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-        res = await node.push_tx(sb)
-        assert len(res["additions"]) == 1
-
-        nft_coin = res["additions"][0]
-
-        nft_coin_records = await node.sim_client.get_coin_records_by_parent_ids([nft_coin.parent_coin_info])
-
-        assert not nft_coin_records[0].spent
-
-        # assert that the current state is for sale
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_records[0].confirmed_block_index
-        )
-        p, _ = last_spend.solution.to_program().uncurry()
-
-        state = p.as_python()[-1][0]
-        assert int_from_bytes(state[0]) == 100
-
-        # carol purchases
-        new_state = [0, 1200, carol.puzzle_hash, carol.pk_]
-        price = 1200
-        payment_coin = await carol.choose_coin(price)
-        payment_coin_puzzle = puzzle_for_pk(carol.pk_)
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle,
-        )
-
-        sb = await sign_coin_spends(
-            [nft_spend, p2_spend, payment_spend],
-            carol.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-
-        alice_pre_balance = alice.balance()
-        bob_pre_balance = bob.balance()
-        carol_pre_balance = carol.balance()
-
-        res = await node.push_tx(sb)
-
-        assert res["additions"]
-
-        # assert royalty payments are made
-        assert alice.balance() == alice_pre_balance + (price * royalty[1] / 100)
-        assert bob.balance() == bob_pre_balance + (price * (100 - royalty[1]) / 100)
-        assert carol.balance() == carol_pre_balance - price
-
-    @pytest.mark.asyncio
-    async def test_zero_royalty(self, node, alice, bob, carol):
-        amount = 101
-        nft_data = ("CreatorNFT", ["v0.1", "other data", "three"])
-        launch_state = [100, 1000, alice.puzzle_hash, alice.pk_]
         royalty = [alice.puzzle_hash, 0]
+
         found_coin = await alice.choose_coin(amount)
         found_coin_puzzle = puzzle_for_pk(alice.pk_)
         launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
 
         # Launcher Spend
-        launcher_spend = make_launcher_spend(found_coin, amount, launch_state, royalty, nft_data)
-        found_spend = make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
-        eve_spend = make_eve_spend(launch_state, royalty, launcher_spend)
-
-        sb = await sign_coin_spends(
-            [launcher_spend, found_spend, eve_spend],
-            alice.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-
-        res = await node.push_tx(sb)
-        assert res["additions"]
-        assert res["removals"]
-
-        nft_coin_record = await node.sim_client.get_coin_records_by_parent_ids([eve_spend.coin.name()])
-        nft_coin = nft_coin_record[0].coin
-
-        # Purchase Spend
-        new_state = [0, 0, bob.puzzle_hash, bob.pk_]
-        price = 1000
-        payment_coin = await bob.choose_coin(price)
-        payment_coin_puzzle = puzzle_for_pk(bob.pk_)
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_record[0].confirmed_block_index
-        )
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle,
-        )
-        
-
-        sb = await sign_coin_spends(
-            [nft_spend, p2_spend, payment_spend],
-            bob.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-        alice_pre_balance = alice.balance()
-        bob_pre_balance = bob.balance()
-
-        res_2 = await node.push_tx(sb)
-        assert res_2["additions"]
-        assert res_2["removals"]
-
-        # assert alice has been paid
-        assert alice_pre_balance + price == alice.balance()
-        assert bob_pre_balance - price == bob.balance()
-
-        # assert latest amount in nft is unchanged
-        nft_coin_record = await node.sim_client.get_coin_records_by_parent_ids([nft_coin.name()])
-        assert len(nft_coin_record) == 3
-        nft_coin_record = next(r for r in nft_coin_record if r.coin.amount == nft_coin.amount)
-        assert not nft_coin_record.spent
-        nft_coin = nft_coin_record.coin
-
-        # assert that the current state is not for sale
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_record.confirmed_block_index
-        )
-        p, _ = last_spend.solution.to_program().uncurry()
-
-        state = p.as_python()[-1][0]
-        assert int_from_bytes(state[0]) != 100
-
-        # bob updates state to for sale
-        new_state = [100, 1200, bob.puzzle_hash, bob.pk_]
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_record.confirmed_block_index
-        )
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        update_spend = make_update_spend(nft, new_state)
-
-        sb = await sign_coin_spends(
-            [update_spend],
-            bob.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-        res = await node.push_tx(sb)
-        assert len(res["additions"]) == 1
-
-        nft_coin = res["additions"][0]
-
-        nft_coin_records = await node.sim_client.get_coin_records_by_parent_ids([nft_coin.parent_coin_info])
-
-        assert not nft_coin_records[0].spent
-
-        # assert that the current state is for sale
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_records[0].confirmed_block_index
-        )
-        p, _ = last_spend.solution.to_program().uncurry()
-
-        state = p.as_python()[-1][0]
-        assert int_from_bytes(state[0]) == 100
-
-        # carol purchases
-        new_state = [0, 1200, carol.puzzle_hash, carol.pk_]
-        price = 1200
-        payment_coin = await carol.choose_coin(price)
-        payment_coin_puzzle = puzzle_for_pk(carol.pk_)
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle,
-        )
-
-        sb = await sign_coin_spends(
-            [nft_spend, p2_spend, payment_spend],
-            carol.pk_to_sk,
-            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
-            DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
-        )
-
-        alice_pre_balance = alice.balance()
-        bob_pre_balance = bob.balance()
-        carol_pre_balance = carol.balance()
-
-        res = await node.push_tx(sb)
-
-        assert res["additions"]
-
-        # assert royalty payments are made
-        assert alice.balance() == alice_pre_balance
-        assert bob.balance() == bob_pre_balance + price
-        assert carol.balance() == carol_pre_balance - price
+     

@@ -223,7 +223,7 @@ class TestNFTWallet:
             
     @pytest.mark.asyncio
     async def test_launch_and_find_on_other_nodes(self, three_nft_managers):
-        man_0, man_1, man_2, full_node_api_0 = three_nft_managers
+        man_0, man_1, man_2, full_node_api_0, full_node_api_1, full_node_api_2 = three_nft_managers
         await man_0.connect()
         await man_1.connect()
         await man_2.connect()
@@ -234,7 +234,7 @@ class TestNFTWallet:
         royalty = [10]
         tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
         assert tx_id
-        for i in range(0, 3):
+        for i in range(0, 5):
             await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
         # Check other managers find for_sale_nfts
         coins_for_sale_1 = await man_1.get_for_sale_nfts()
