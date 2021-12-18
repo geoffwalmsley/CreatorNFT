@@ -10,6 +10,7 @@ from nft_wallet import NFT
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
+
 def coro(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -17,9 +18,10 @@ def coro(f):
 
     return wrapper
 
+
 def print_nft(nft: NFT):
     print("\n")
-    print("-"*64)
+    print("-" * 64)
     print(f"NFT ID:\n{nft.launcher_id.hex()}\n")
     print(f"Owner: {nft.owner_fingerprint()}")
     if nft.is_for_sale():
@@ -31,9 +33,8 @@ def print_nft(nft: NFT):
     print(f"Chialisp: {str(nft.data[0])}\n")
     print(f"Data:\n")
     print(nft.data[1].decode("utf-8"))
-    print("-"*64)
+    print("-" * 64)
     print("\n")
-
 
 
 @click.group(
@@ -56,7 +57,7 @@ async def init_cmd():
 
 
 @cli.command("view", short_help="View a single NFT by id")
-@click.option('-n', '--nft-id', required=True, type=str)
+@click.option("-n", "--nft-id", required=True, type=str)
 @click.pass_context
 @coro
 async def view_cmd(ctx, nft_id):
@@ -80,7 +81,7 @@ async def list_cmd(ctx) -> None:
     await manager.close()
     for nft in nfts:
         print_nft(nft)
-    
+
 
 @cli.command("sale", short_help="Show some NFTs for sale")
 @click.pass_context
@@ -93,19 +94,19 @@ async def sale_cmd(ctx) -> None:
         print_nft(nft)
     await manager.close()
 
-    
+
 @cli.command("launch", short_help="Launch a new NFT")
-@click.option('-d', '--data', required=True, type=str)
-@click.option('-r', '--royalty', required=True, type=int)
-@click.option('-a', '--amount', type=int, default=101)
-@click.option('-p', '--price', type=int, default=1000)
-@click.option('--for-sale/--not-for-sale', type=bool, default=False)
+@click.option("-d", "--data", required=True, type=str)
+@click.option("-r", "--royalty", required=True, type=int)
+@click.option("-a", "--amount", type=int, default=101)
+@click.option("-p", "--price", type=int, default=1000)
+@click.option("--for-sale/--not-for-sale", type=bool, default=False)
 @click.pass_context
 @coro
 async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
     manager = NFTManager()
     await manager.connect()
-    with open(Path(data), 'r') as f:
+    with open(Path(data), "r") as f:
         datastr = f.readlines()
     nft_data = ("CreatorNFT", "".join(datastr))
     if for_sale:
@@ -122,9 +123,9 @@ async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
 
 
 @cli.command("update", short_help="Update one of your NFTs")
-@click.option('-n', '--nft-id', required=True, type=str)
-@click.option('-p', '--price', required=True, type=int)
-@click.option('--for-sale/--not-for-sale', required=True, type=bool, default=False)
+@click.option("-n", "--nft-id", required=True, type=str)
+@click.option("-p", "--price", required=True, type=int)
+@click.option("--for-sale/--not-for-sale", required=True, type=bool, default=False)
 @click.pass_context
 @coro
 async def update_cmd(ctx, nft_id, price, for_sale):
@@ -143,9 +144,9 @@ async def update_cmd(ctx, nft_id, price, for_sale):
 
 
 @cli.command("buy", short_help="Update one of your NFTs")
-@click.option('-n', '--nft-id', required=True, type=str)
-@click.option('-p', '--price', required=True, type=int)
-@click.option('--for-sale/--not-for-sale', required=True, type=bool, default=False)
+@click.option("-n", "--nft-id", required=True, type=str)
+@click.option("-p", "--price", required=True, type=int)
+@click.option("--for-sale/--not-for-sale", required=True, type=bool, default=False)
 @click.pass_context
 @coro
 async def buy_cmd(ctx, nft_id, price, for_sale):
@@ -163,11 +164,11 @@ async def buy_cmd(ctx, nft_id, price, for_sale):
     await manager.close()
 
 
-
-
 def monkey_patch_click() -> None:
     import click.core
+
     click.core._verify_python3_env = lambda *args, **kwargs: 0  # type: ignore[attr-defined]
+
 
 def main() -> None:
     monkey_patch_click()

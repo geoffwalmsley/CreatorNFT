@@ -1,15 +1,15 @@
 (mod (MOD_HASH STATE ROYALTY Truths new_state payment_info)
 
-     
+
 
      ;; STATE = (for_sale_flag, price, owner_ph, owner_pk)
      ;; ROYALTY = (creator_puzhash, percentage)
-     
+
      ;; new_state: update for new STATE
      ;; payment_info: p2_singleton_coin_id
      ;; fee: payment fee in mojo
 
-     
+
 
      (include condition_codes.clib)
      (include sha256tree.clib)
@@ -99,7 +99,7 @@
     ;; (if payment_info
     ;; 	(trade_coin MOD_HASH
     ;;                     STATE
-    ;; 			ROYALTY	
+    ;; 			ROYALTY
     ;; 		        (my_amount_truth Truths)
     ;;   		        new_state
     ;; 		        payment_info
@@ -117,7 +117,7 @@
 	(if (f STATE)
 	    (trade_coin MOD_HASH
                         STATE
-			ROYALTY	
+			ROYALTY
 		        (my_amount_truth Truths)
       		        new_state
 		        payment_info
@@ -129,5 +129,5 @@
 		      (my_amount_truth Truths)
 		      new_state
 		      ))
-		      
+
 )

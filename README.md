@@ -27,7 +27,7 @@ There is basic wallet functionality to identify coins marked as for-sale on the 
    ```sh
    nft launch -d art/bird1.txt -r 10 -p 1200 -a 101
    ```
-   
+
    ```sh
    nft list
    ```
