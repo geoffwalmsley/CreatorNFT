@@ -26,8 +26,8 @@ from chia.full_node.coin_store import CoinStore
 from chia.wallet.derive_keys import (
     master_sk_to_wallet_sk,
     master_sk_to_singleton_owner_sk,
-    master_sk_to_wallet_sk_unhardened
 )
+from chia.wallet.derive_keys import master_sk_to_wallet_sk_unhardened
 from chia.types.coin_spend import CoinSpend
 from chia.wallet.sign_coin_spends import sign_coin_spends
 from chia.wallet.lineage_proof import LineageProof
@@ -71,12 +71,14 @@ class NFTManager:
         rpc_host = config["self_hostname"]
         full_node_rpc_port = config["full_node"]["rpc_port"]
         wallet_rpc_port = config["wallet"]["rpc_port"]
-        self.node_client = await FullNodeRpcClient.create(
-            rpc_host, uint16(full_node_rpc_port), Path(DEFAULT_ROOT_PATH), config
-        )
-        self.wallet_client = await WalletRpcClient.create(
-            rpc_host, uint16(wallet_rpc_port), Path(DEFAULT_ROOT_PATH), config
-        )
+        if not self.node_client:
+            self.node_client = await FullNodeRpcClient.create(
+                rpc_host, uint16(full_node_rpc_port), Path(DEFAULT_ROOT_PATH), config
+            )
+        if not self.wallet_client:
+            self.wallet_client = await WalletRpcClient.create(
+                rpc_host, uint16(wallet_rpc_port), Path(DEFAULT_ROOT_PATH), config
+            )
         self.connection = await aiosqlite.connect(Path(self.db_name))
         self.db_wrapper = DBWrapper(self.connection)
         self.nft_wallet = await NFTWallet.create(self.db_wrapper, self.node_client)
@@ -119,7 +121,8 @@ class NFTManager:
 
     async def derive_unhardened_keys(self, n=10):
         for i in range(n):
-            _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)
+            #_sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i) #  TESTING on main branch
+            _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i) # protocol_and_cats_branch
             synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
             self.key_dict[bytes(_sk.get_g1())] = _sk
             self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
