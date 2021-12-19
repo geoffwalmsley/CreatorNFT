@@ -95,7 +95,7 @@ class NFTManager:
             await self.connection.close()
 
     async def sync(self) -> None:
-        self.nft_wallet.basic_sync()
+        await self.nft_wallet.basic_sync()
     
     async def derive_nft_keys(self, index: int = 0) -> None:
         if not self.master_sk:
