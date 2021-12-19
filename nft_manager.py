@@ -75,7 +75,7 @@ class NFTManager:
         await self.derive_wallet_keys()
         await self.derive_unhardened_keys()
         await self.nft_wallet.update_to_current_block()
-
+    
     async def close(self) -> None:
         if self.node_client:
             self.node_client.close()
@@ -86,6 +86,9 @@ class NFTManager:
         if self.connection:
             await self.connection.close()
 
+    async def sync(self) -> None:
+        self.nft_wallet.basic_sync()
+    
     async def derive_nft_keys(self, index: int = 0) -> None:
         if not self.master_sk:
             await self.load_master_sk()
@@ -140,7 +143,7 @@ class NFTManager:
                     return (coin_record.coin, puzzle)
         raise ValueError("No spendable coins found")
 
-    async def launch_nft(self, amount: int, nft_data: Tuple, launch_state: List, royalty: List):
+    async def launch_nft(self, amount: int, nft_data: Tuple, launch_state: List, royalty: List) -> bytes:
         addr = await self.wallet_client.get_next_address(1, False)
         puzzle_hash = decode_puzzle_hash(addr)
         launch_state += [puzzle_hash, self.nft_pk]
