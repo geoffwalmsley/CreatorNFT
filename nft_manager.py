@@ -52,10 +52,9 @@ LAUNCHER_PUZZLE = load_clsp_relative("clsp/nft_launcher.clsp")
 LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 
-
-
+config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
 testnet_agg_sig_data = config['network_overrides']['constants']['testnet10']['AGG_SIG_ME_ADDITIONAL_DATA']
-DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace(**{"AGG_SIG_ME_ADDITIONAL_DATA": b"\xcc"})
+DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace_str_to_bytes(**{"AGG_SIG_ME_ADDITIONAL_DATA": testnet_agg_sig_data})
 
 
 class NFTManager:
@@ -67,11 +66,7 @@ class NFTManager:
         self.key_dict = {}
 
     async def connect(self, wallet_index: int = 0) -> None:
-        config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
-        if config['selected_network'] == "testnet10":
-            testnet_agg_sig_data = config['network_overrides']['constants']['testnet10']['AGG_SIG_ME_ADDITIONAL_DATA']
-            DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace(**{"AGG_SIG_ME_ADDITIONAL_DATA": testnet_agg_sig_data})
-            
+        config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")            
         rpc_host = config["self_hostname"]
         full_node_rpc_port = config["full_node"]["rpc_port"]
         wallet_rpc_port = config["wallet"]["rpc_port"]
@@ -108,8 +103,6 @@ class NFTManager:
         await self.nft_wallet.basic_sync()
     
     async def derive_nft_keys(self, index: int = 0) -> None:
-        if not self.master_sk:
-            await self.load_master_sk()
         _sk = master_sk_to_singleton_owner_sk(self.master_sk, index)
         synth_sk = calculate_synthetic_secret_key(_sk, driver.INNER_MOD.get_tree_hash())
         self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
@@ -117,8 +110,6 @@ class NFTManager:
         self.nft_pk = synth_sk.get_g1()
 
     async def derive_wallet_keys(self, index=0):
-        if not self.master_sk:
-            await self.load_master_sk()
         _sk = master_sk_to_wallet_sk(self.master_sk, index)
         synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
         self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
@@ -126,9 +117,6 @@ class NFTManager:
         self.wallet_sk = _sk
 
     async def derive_unhardened_keys(self, n=10):
-        if not self.master_sk:
-            await self.load_master_sk()
-
         for i in range(n):
             # _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)
             _sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i)
