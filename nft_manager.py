@@ -236,7 +236,7 @@ class NFTManager:
         sb = await sign_coin_spends(
             [nft_spend, p2_spend, payment_spend],
             self.pk_to_sk,
-            self.AGG_SIG_ME_DATA,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
             DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
         )
         res = await self.node_client.push_tx(sb)
