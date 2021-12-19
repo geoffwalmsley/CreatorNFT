@@ -52,6 +52,12 @@ LAUNCHER_PUZZLE = load_clsp_relative("clsp/nft_launcher.clsp")
 LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 
+
+
+testnet_agg_sig_data = config['network_overrides']['constants']['testnet10']['AGG_SIG_ME_ADDITIONAL_DATA']
+DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace(**{"AGG_SIG_ME_ADDITIONAL_DATA": b"\xcc"})
+
+
 class NFTManager:
     def __init__(self, wallet_client: WalletRpcClient = None, node_client: FullNodeRpcClient = None, db_name: str = "nft_store.db") -> None:
         self.wallet_client = wallet_client
@@ -62,6 +68,10 @@ class NFTManager:
 
     async def connect(self, wallet_index: int = 0) -> None:
         config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
+        if config['selected_network'] == "testnet10":
+            testnet_agg_sig_data = config['network_overrides']['constants']['testnet10']['AGG_SIG_ME_ADDITIONAL_DATA']
+            DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace(**{"AGG_SIG_ME_ADDITIONAL_DATA": testnet_agg_sig_data})
+            
         rpc_host = config["self_hostname"]
         full_node_rpc_port = config["full_node"]["rpc_port"]
         wallet_rpc_port = config["wallet"]["rpc_port"]
