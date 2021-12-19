@@ -52,7 +52,7 @@ def cli(ctx: click.Context):
 async def init_cmd():
     manager = NFTManager()
     await manager.connect()
-    await manager.init_db()
+    await manager.sync()
     await manager.close()
 
 
@@ -83,7 +83,7 @@ async def list_cmd(ctx) -> None:
         print_nft(nft)
 
 
-@cli.command("sale", short_help="Show some NFTs for sale")
+@cli.command("list-for-sale", short_help="Show some NFTs for sale")
 @click.pass_context
 @coro
 async def sale_cmd(ctx) -> None:
@@ -104,15 +104,19 @@ async def sale_cmd(ctx) -> None:
 @click.pass_context
 @coro
 async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
+    assert price > 1000
+    assert amount % 2 == 1
+    price = round(price, -3)
+    
     manager = NFTManager()
     await manager.connect()
     with open(Path(data), "r") as f:
         datastr = f.readlines()
     nft_data = ("CreatorNFT", "".join(datastr))
     if for_sale:
-        launch_state = [100, price]
+        launch_state = [10, price]
     else:
-        launch_state = [90, price]
+        launch_state = [0, price]
     royalty = [royalty]
     tx_id, launcher_id = await manager.launch_nft(amount, nft_data, launch_state, royalty)
     print(f"Transaction id: {tx_id}")
@@ -129,12 +133,14 @@ async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
 @click.pass_context
 @coro
 async def update_cmd(ctx, nft_id, price, for_sale):
+    assert price > 1000
+    price = round(price, -3)
     manager = NFTManager()
     await manager.connect()
     if for_sale:
-        new_state = [100, price]
+        new_state = [10, price]
     else:
-        new_state = [90, price]
+        new_state = [0, price]
     tx_id = await manager.update_nft(hexstr_to_bytes(nft_id), new_state)
     print(f"Transaction id: {tx_id}")
     nft = await manager.wait_for_confirmation(tx_id, hexstr_to_bytes(nft_id))
@@ -150,12 +156,14 @@ async def update_cmd(ctx, nft_id, price, for_sale):
 @click.pass_context
 @coro
 async def buy_cmd(ctx, nft_id, price, for_sale):
+    assert price > 1000
+    price = round(price, -3)
     manager = NFTManager()
     await manager.connect()
     if for_sale:
-        new_state = [100, price]
+        new_state = [10, price]
     else:
-        new_state = [90, price]
+        new_state = [0, price]
     tx_id = await manager.buy_nft(hexstr_to_bytes(nft_id), new_state)
     print(f"Transaction id: {tx_id}")
     nft = await manager.wait_for_confirmation(tx_id, hexstr_to_bytes(nft_id))

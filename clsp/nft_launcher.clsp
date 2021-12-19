@@ -1,0 +1,57 @@
+(mod (nft_full_puzzle_hash
+      singleton_mod_hash
+      launcher_id
+      launcher_ph
+      inner_mod_hash
+      state
+      royalty
+      amount
+      key_value_list)
+
+  (include condition_codes.clib)
+  (include curry_and_treehash.clib)
+  (include sha256tree.clib)
+
+  (defun outer_puzzle_hash (singleton_mod_hash
+  	 		    launcher_id
+			    launcher_ph
+			    inner_puzzle_hash)
+      (puzzle-hash-of-curried-function singleton_mod_hash
+            			       inner_puzzle_hash
+				       (sha256tree (c singleton_mod_hash
+				       		   (c launcher_id launcher_ph)))))
+
+
+  (defun inner_puzzle_hash (inner_mod_hash royalty state)
+         (puzzle-hash-of-curried-function inner_mod_hash
+	 				  (sha256tree royalty)
+	 				  (sha256tree state)
+					  (sha256 1 inner_mod_hash)))
+
+  ;; main
+  (if (= (outer_puzzle_hash singleton_mod_hash
+  			   launcher_id
+			   launcher_ph
+			   (inner_puzzle_hash inner_mod_hash
+			   		      royalty
+					      state))
+      nft_full_puzzle_hash)
+      ;;then
+      (if (> (f (r royalty)) -1)
+      	  (if (> 101 (f (r royalty)))
+	      (list
+		(list CREATE_COIN nft_full_puzzle_hash amount)
+		(list CREATE_COIN_ANNOUNCEMENT (sha256tree (list nft_full_puzzle_hash
+		      			       		   	 singleton_mod_hash
+								 launcher_id
+								 launcher_ph
+								 inner_mod_hash
+								 state
+								 royalty
+		      			       		   	 amount
+								 key_value_list))))
+	      (x "royalty > 100"))
+	  (x "royalty < 0"))
+      ;;else
+      (x "incorrect inner puzzle"))
+)
