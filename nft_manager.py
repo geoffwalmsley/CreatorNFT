@@ -53,7 +53,7 @@ LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 
 class NFTManager:
-    def __init__(self, wallet_client: WalletRpcClient, node_client: FullNodeRpcClient, db_name: str) -> None:
+    def __init__(self, wallet_client: WalletRpcClient = None, node_client: FullNodeRpcClient = None, db_name: str = "nft_store.db") -> None:
         self.wallet_client = wallet_client
         self.node_client = node_client
         self.db_name = db_name
@@ -61,8 +61,16 @@ class NFTManager:
         self.key_dict = {}
 
     async def connect(self, wallet_index: int = 0) -> None:
-        if not self.db_name:
-            self.db_name = "nft_store.db"
+        config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
+        rpc_host = config["self_hostname"]
+        full_node_rpc_port = config["full_node"]["rpc_port"]
+        wallet_rpc_port = config["wallet"]["rpc_port"]
+        self.node_client = await FullNodeRpcClient.create(
+            rpc_host, uint16(full_node_rpc_port), Path(DEFAULT_ROOT_PATH), config
+        )
+        self.wallet_client = await WalletRpcClient.create(
+            rpc_host, uint16(wallet_rpc_port), Path(DEFAULT_ROOT_PATH), config
+        )
         self.connection = await aiosqlite.connect(Path(self.db_name))
         self.db_wrapper = DBWrapper(self.connection)
         self.nft_wallet = await NFTWallet.create(self.db_wrapper, self.node_client)
