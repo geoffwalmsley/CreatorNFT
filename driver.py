@@ -35,8 +35,8 @@ LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 ESCAPE_VALUE = -113
 MELT_CONDITION = [ConditionOpcode.CREATE_COIN, 0, ESCAPE_VALUE]
 
-INNER_MOD = load_clsp_relative("clsp/nft_with_fee.clsp")
-P2_MOD = load_clsp_relative("clsp/p2_singleton_payer.clsp")
+INNER_MOD = load_clsp_relative("clsp/creator_nft.clsp")
+P2_MOD = load_clsp_relative("clsp/p2_creator_nft.clsp")
 
 
 def run_singleton(full_puzzle: Program, solution: Program) -> List:

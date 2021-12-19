@@ -54,12 +54,17 @@ LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 
 config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
-testnet_agg_sig_data = config['network_overrides']['constants']['testnet10']['AGG_SIG_ME_ADDITIONAL_DATA']
+testnet_agg_sig_data = config["network_overrides"]["constants"]["testnet10"]["AGG_SIG_ME_ADDITIONAL_DATA"]
 DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace_str_to_bytes(**{"AGG_SIG_ME_ADDITIONAL_DATA": testnet_agg_sig_data})
 
 
 class NFTManager:
-    def __init__(self, wallet_client: WalletRpcClient = None, node_client: FullNodeRpcClient = None, db_name: str = "nft_store.db") -> None:
+    def __init__(
+        self,
+        wallet_client: WalletRpcClient = None,
+        node_client: FullNodeRpcClient = None,
+        db_name: str = "nft_store.db",
+    ) -> None:
         self.wallet_client = wallet_client
         self.node_client = node_client
         self.db_name = db_name
@@ -67,7 +72,7 @@ class NFTManager:
         self.key_dict = {}
 
     async def connect(self, wallet_index: int = 0) -> None:
-        config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")            
+        config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
         rpc_host = config["self_hostname"]
         full_node_rpc_port = config["full_node"]["rpc_port"]
         wallet_rpc_port = config["wallet"]["rpc_port"]
@@ -91,7 +96,7 @@ class NFTManager:
         await self.derive_wallet_keys()
         await self.derive_unhardened_keys()
         await self.nft_wallet.update_to_current_block()
-    
+
     async def close(self) -> None:
         if self.node_client:
             self.node_client.close()
@@ -104,7 +109,7 @@ class NFTManager:
 
     async def sync(self) -> None:
         await self.nft_wallet.basic_sync()
-    
+
     async def derive_nft_keys(self, index: int = 0) -> None:
         _sk = master_sk_to_singleton_owner_sk(self.master_sk, index)
         synth_sk = calculate_synthetic_secret_key(_sk, driver.INNER_MOD.get_tree_hash())
@@ -121,8 +126,8 @@ class NFTManager:
 
     async def derive_unhardened_keys(self, n=10):
         for i in range(n):
-            #_sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i) #  TESTING on main branch
-            _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i) # protocol_and_cats_branch
+            # _sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i) #  TESTING on main branch
+            _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)  # protocol_and_cats_branch
             synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
             self.key_dict[bytes(_sk.get_g1())] = _sk
             self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
@@ -237,7 +242,6 @@ class NFTManager:
         return for_sale_nfts
 
     async def buy_nft(self, launcher_id: bytes, new_state: List) -> bytes:
-        await self.nft_wallet.update_to_current_block()
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
         addr = await self.wallet_client.get_next_address(1, False)
         ph = decode_puzzle_hash(addr)

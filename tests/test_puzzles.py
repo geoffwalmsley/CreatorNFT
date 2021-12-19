@@ -27,11 +27,9 @@ from clvm.EvalError import EvalError
 
 from CreatorNFT.sim import load_clsp_relative
 from CreatorNFT.sim import setup_node_only
-<<<<<<< HEAD
-from CreatorNFT.driver import make_launcher_spend, make_found_spend, make_eve_spend, make_buy_spend, make_update_spend
-=======
+
 import CreatorNFT.driver as driver
->>>>>>> test_manager_setup
+
 from CreatorNFT.nft_wallet import NFT
 
 
@@ -43,8 +41,8 @@ LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 ESCAPE_VALUE = -113
 MELT_CONDITION = [ConditionOpcode.CREATE_COIN, 0, ESCAPE_VALUE]
 
-INNER_MOD = load_clsp_relative("clsp/nft_with_fee.clsp")
-P2_MOD = load_clsp_relative("clsp/p2_singleton_payer.clsp")
+INNER_MOD = load_clsp_relative("clsp/creator_nft.clsp")
+P2_MOD = load_clsp_relative("clsp/p2_creator_nft.clsp")
 
 
 @pytest.fixture
@@ -79,8 +77,8 @@ class TestCreatorNft:
     @pytest.mark.asyncio
     async def test_clsp_compile(self):
         launcher = load_clsp_relative("clsp/nft_launcher.clsp")
-        singleton = load_clsp_relative("clsp/nft_with_fee.clsp")
-        p2 = load_clsp_relative("clsp/p2_singleton_payer.clsp")
+        singleton = load_clsp_relative("clsp/creator_nft.clsp")
+        p2 = load_clsp_relative("clsp/p2_creator_nft.clsp")
         assert launcher
         assert singleton
         assert p2
@@ -281,23 +279,6 @@ class TestCreatorNft:
         royalty = [alice.puzzle_hash, 25]
         fee = 20
 
-<<<<<<< HEAD
-        # Purchase Spend
-        new_state = [0, 0, bob.puzzle_hash, bob.pk_]
-        price = 1000
-        payment_coin = await bob.choose_coin(price)
-        payment_coin_puzzle = puzzle_for_pk(bob.pk_)
-        last_spend = await node.sim_client.get_puzzle_and_solution(
-            nft_coin.parent_coin_info, nft_coin_record[0].confirmed_block_index
-        )
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle
-        )
-=======
         found_coin = await alice.choose_coin(amount)
         found_coin_puzzle = puzzle_for_pk(alice.pk_)
         launcher_coin = Coin(found_coin.name(), LAUNCHER_PUZZLE_HASH, amount)
@@ -305,7 +286,6 @@ class TestCreatorNft:
         launcher_spend = driver.make_launcher_spend(found_coin, amount, state, royalty, key_value_list)
         found_spend = driver.make_found_spend(found_coin, found_coin_puzzle, launcher_spend, amount)
         eve_spend = driver.make_eve_spend(state, royalty, launcher_spend)
->>>>>>> test_manager_setup
 
         sb = await sign_coin_spends(
             [launcher_spend, found_spend, eve_spend],
@@ -321,18 +301,11 @@ class TestCreatorNft:
         nft_coin = next(
             c for c in res["additions"] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name())
         )
-<<<<<<< HEAD
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-        
-        update_spend = make_update_spend(nft, new_state)
-=======
         print(nft_coin)
         nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
 
         new_state = [0, 10202, alice.puzzle_hash, alice.pk_]
         update_spend = driver.make_update_spend(nft, new_state)
->>>>>>> test_manager_setup
 
         sb = await sign_coin_spends(
             [update_spend],
@@ -393,15 +366,8 @@ class TestCreatorNft:
         payment_coin = await bob.choose_coin(amount)
         payment_coin_puzzle = puzzle_for_pk(bob.pk_)
 
-<<<<<<< HEAD
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle,
-=======
         nft_coin = next(
             c for c in res["additions"] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name())
->>>>>>> test_manager_setup
         )
 
         nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
@@ -455,12 +421,6 @@ class TestCreatorNft:
             c for c in res["additions"] if (c.amount == amount) and (c.parent_coin_info == eve_spend.coin.name())
         )
 
-<<<<<<< HEAD
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle,
-=======
         nft = NFT(launcher_coin.name(), nft_coin, eve_spend, key_value_list, royalty)
 
         new_state = [0, 10202, bob.puzzle_hash, bob.pk_]
@@ -472,9 +432,7 @@ class TestCreatorNft:
         current_inner_puzzle = INNER_MOD.curry(*args)
         current_singleton_puzzle = SINGLETON_MOD.curry(
             (SINGLETON_MOD_HASH, (nft.launcher_id, LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
->>>>>>> test_manager_setup
         )
-        
 
         assert current_singleton_puzzle.get_tree_hash() == nft.puzzle_hash
         # assert nft.state()[0] != int_to_bytes(0) # is for sale
@@ -592,13 +550,6 @@ class TestCreatorNft:
         nft_coin = next(
             c for c in res["additions"] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name())
         )
-<<<<<<< HEAD
-
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        update_spend = make_update_spend(nft, new_state)
-=======
->>>>>>> test_manager_setup
 
         nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
         new_state = [10, 10000, bob.puzzle_hash, bob.pk_]
@@ -640,12 +591,6 @@ class TestCreatorNft:
             c for c in res["additions"] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name())
         )
 
-<<<<<<< HEAD
-        nft = NFT(launcher_coin.name(), nft_coin, last_spend, nft_data, royalty)
-
-        nft_spend, p2_spend, payment_spend = make_buy_spend(
-            nft, new_state, payment_coin, payment_coin_puzzle,
-=======
         nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)
         new_state = [10, 387350000, carol.puzzle_hash, carol.pk_]
         res, nft_spend = await buy(carol, nft, new_state)
@@ -654,7 +599,6 @@ class TestCreatorNft:
         # carol upadtes
         nft_coin = next(
             c for c in res["additions"] if (c.amount == amount) and (c.parent_coin_info == nft_spend.coin.name())
->>>>>>> test_manager_setup
         )
 
         nft = NFT(launcher_coin.name(), nft_coin, nft_spend, key_value_list, royalty)

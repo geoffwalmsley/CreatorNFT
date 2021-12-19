@@ -230,18 +230,21 @@ class TestNFTWallet:
         amount = 101
         nft_data = ("CreatorNFT", "some data")
         for_sale_launch_state = [100, 1000]
-        not_for_sale_launch_state = [90, 1000]
+        not_for_sale_launch_state = [0, 1000]
         royalty = [10]
         tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
         assert tx_id
         for i in range(0, 5):
             await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
-        # Check other managers find for_sale_nfts
+            await full_node_api_1.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+        # Check other managers find
+        await man_1.nft_wallet.update_to_current_block()
+        await man_2.nft_wallet.update_to_current_block()
         coins_for_sale_1 = await man_1.get_for_sale_nfts()
         coins_for_sale_2 = await man_2.get_for_sale_nfts()
+        print(coins_for_sale_1)
         assert coins_for_sale_1[0].launcher_id == launcher_id
         assert coins_for_sale_2[0].launcher_id == launcher_id
-
 
     @pytest.mark.asyncio
     async def test_basic_sync(self, three_nft_managers):
@@ -251,7 +254,7 @@ class TestNFTWallet:
         amount = 101
         nft_data = ("CreatorNFT", "some data")
         for_sale_launch_state = [100, 1000]
-        not_for_sale_launch_state = [90, 1000]
+        not_for_sale_launch_state = [0, 1000]
         royalty = [10]
         tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
         assert tx_id
@@ -264,10 +267,8 @@ class TestNFTWallet:
         nfts = await man_1.nft_wallet.get_all_nft_ids()
         assert len(nfts) == 1
         nft = await man_1.nft_wallet.get_nft_by_launcher_id(nfts[0])
-        
+
         assert nft.launcher_id == launcher_id
-
-
 
     @pytest.mark.asyncio
     async def test_update_state(self, three_nft_managers):
@@ -301,9 +302,6 @@ class TestNFTWallet:
         assert int_from_bytes(nft.state()[0]) == new_state[0]
         assert int_from_bytes(nft.state()[1]) == new_state[1]
 
-
-
-
     @pytest.mark.asyncio
     async def test_buy_spends(self, three_nft_managers):
         man_0, man_1, man_2, full_node_api_0, full_node_api_1, full_node_api_2 = three_nft_managers
@@ -314,7 +312,7 @@ class TestNFTWallet:
         # we will sync man_2 later to test buying an earlier coin
         amount_to_send = int(1e12)
         man_0_balance = await man_0.available_balance()
- 
+
         # send 1xch from man_0 to man_1
         man_0_addr = await man_0.wallet_client.get_next_address(1, False)
         man_1_addr = await man_1.wallet_client.get_next_address(1, False)
@@ -347,17 +345,17 @@ class TestNFTWallet:
         royalty = [10]
         tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
         assert tx_id
-        
+
         for i in range(0, 5):
             await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
-            
+
         nft = await man_0.view_nft(launcher_id)
         assert nft.is_for_sale()
 
         # Man_1 finds the launched nft on-chain:
         for i in range(0, 5):
             await full_node_api_1.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
-
+        await man_1.nft_wallet.update_to_current_block()
         for_sale_nfts = await man_1.get_for_sale_nfts()
         assert for_sale_nfts
         assert for_sale_nfts[0].launcher_id == launcher_id
@@ -365,7 +363,7 @@ class TestNFTWallet:
 
         man_0_start_bal = await man_0.available_balance()
         man_1_start_bal = await man_1.available_balance()
-        
+
         # Man_1 buys nft and sets to not-for-sale
         new_state = [0, 10000]
         tx_id = await man_1.buy_nft(launcher_id, new_state)
@@ -389,10 +387,10 @@ class TestNFTWallet:
         for i in range(0, 5):
             await full_node_api_1.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
             await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
-        
+
         nft = await man_0.view_nft(launcher_id)
         assert nft.is_for_sale()
-        
+
         # man_2 comes online, buys nft, check royalty payment
         await man_2.connect()
         await man_2.nft_wallet.basic_sync()
@@ -413,16 +411,10 @@ class TestNFTWallet:
             await full_node_api_2.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
             await full_node_api_1.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
 
-        # assert royalties have been paid 
+        # assert royalties have been paid
         assert (await man_0.available_balance()) == man_0_start_bal + 1000
         assert (await man_1.available_balance()) == man_1_start_bal + 9000
         assert (await man_2.available_balance()) == man_2_start_bal - 10000
-        
-        
-
-        
-        
-        
 
     @pytest.mark.asyncio
     async def test_coin_selection(self, three_nft_managers):
@@ -451,7 +443,9 @@ class TestNFTWallet:
 
         await time_out_assert(5, tx_in_mempool, True)
 
-        assert (await man_0.wallet_client.get_wallet_balance("1"))["unconfirmed_wallet_balance"] == man_0_balance - int(1e12)
+        assert (await man_0.wallet_client.get_wallet_balance("1"))["unconfirmed_wallet_balance"] == man_0_balance - int(
+            1e12
+        )
 
         man_0_balance = (await man_0.wallet_client.get_wallet_balance("1"))["confirmed_wallet_balance"]
         print(man_0_balance)
@@ -488,9 +482,3 @@ class TestNFTWallet:
         launched_nft = await man_1.get_my_nfts()
         assert launched_nft[0].price() == 1000
         assert launched_nft[0].is_for_sale()
-
-        
-        
-        
-
-        

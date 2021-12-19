@@ -107,7 +107,7 @@ async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
     assert price > 1000
     assert amount % 2 == 1
     price = round(price, -3)
-    
+
     manager = NFTManager()
     await manager.connect()
     with open(Path(data), "r") as f:

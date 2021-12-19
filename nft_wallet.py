@@ -21,8 +21,8 @@ SINGLETON_MOD_HASH = SINGLETON_MOD.get_tree_hash()
 LAUNCHER_PUZZLE = load_clsp_relative("clsp/nft_launcher.clsp")
 LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
-INNER_MOD = load_clsp_relative("clsp/nft_with_fee.clsp")
-P2_MOD = load_clsp_relative("clsp/p2_singleton_payer.clsp")
+INNER_MOD = load_clsp_relative("clsp/creator_nft.clsp")
+P2_MOD = load_clsp_relative("clsp/p2_creator_nft.clsp")
 
 
 class NFT(Coin):
@@ -150,7 +150,6 @@ class NFTWallet:
         singletons = await self.node_client.get_coin_records_by_puzzle_hash(
             LAUNCHER_PUZZLE_HASH, start_height=current_block, end_height=new_height
         )
-        print(f"Checking {len(singletons)} Singletons")
         await self.filter_singletons(singletons)
 
         while new_height > current_block:
@@ -246,7 +245,6 @@ class NFTWallet:
         await self.db_connection.commit()
 
     async def get_all_nft_ids(self):
-        await self.update_to_current_block()
         query = "SELECT launcher_id FROM nft_coins"
         cursor = await self.db_connection.execute(query)
         rows = await cursor.fetchall()
