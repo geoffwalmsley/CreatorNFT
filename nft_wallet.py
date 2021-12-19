@@ -51,7 +51,7 @@ class NFT(Coin):
     #     return mod.as_python()[0]
 
     def is_for_sale(self):
-        if int_from_bytes(self.state()[0]) == 100:
+        if int_from_bytes(self.state()[0]) != 0:
             return True
 
     def royalty_pc(self):
