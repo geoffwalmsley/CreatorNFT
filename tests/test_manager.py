@@ -22,6 +22,7 @@ from chia.wallet.derive_keys import master_sk_to_wallet_sk
 from chia.util.ints import uint16, uint32
 from chia.wallet.transaction_record import TransactionRecord
 from chia.protocols.full_node_protocol import RespondBlock
+from clvm.casts import int_to_bytes, int_from_bytes
 
 # from chia.wallet.transaction_sorting import SortKey
 from tests.setup_nodes import bt, setup_simulators_and_wallets, self_hostname
@@ -220,8 +221,11 @@ class TestNFTWallet:
     async def test_launch_and_find_on_other_nodes(self, three_nft_managers):
         man_0, man_1, man_2, full_node_api_0, full_node_api_1, full_node_api_2 = three_nft_managers
         await man_0.connect()
+        await man_0.nft_wallet.basic_sync()
         await man_1.connect()
+        await man_1.nft_wallet.basic_sync()
         await man_2.connect()
+        await man_2.nft_wallet.basic_sync()
         amount = 101
         nft_data = ("CreatorNFT", "some data")
         for_sale_launch_state = [100, 1000]
@@ -237,13 +241,79 @@ class TestNFTWallet:
         assert coins_for_sale_1[0].launcher_id == launcher_id
         assert coins_for_sale_2[0].launcher_id == launcher_id
 
+
+    @pytest.mark.asyncio
+    async def test_basic_sync(self, three_nft_managers):
+        man_0, man_1, man_2, full_node_api_0, full_node_api_1, full_node_api_2 = three_nft_managers
+        await man_0.connect()
+        await man_0.nft_wallet.basic_sync()
+        amount = 101
+        nft_data = ("CreatorNFT", "some data")
+        for_sale_launch_state = [100, 1000]
+        not_for_sale_launch_state = [90, 1000]
+        royalty = [10]
+        tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
+        assert tx_id
+        for i in range(0, 5):
+            await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+
+        await man_1.connect()
+        await man_1.nft_wallet.basic_sync()
+
+        nfts = await man_1.nft_wallet.get_all_nft_ids()
+        assert len(nfts) == 1
+        nft = await man_1.nft_wallet.get_nft_by_launcher_id(nfts[0])
+        
+        assert nft.launcher_id == launcher_id
+
+
+
+    @pytest.mark.asyncio
+    async def test_update_state(self, three_nft_managers):
+        man_0, man_1, man_2, full_node_api_0, full_node_api_1, full_node_api_2 = three_nft_managers
+        await man_0.connect()
+        await man_0.nft_wallet.basic_sync()
+        amount = 101
+        nft_data = ("CreatorNFT", "some data")
+        for_sale_launch_state = [100, 1000]
+        not_for_sale_launch_state = [0, 1000]
+        royalty = [10]
+        tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, not_for_sale_launch_state, royalty)
+        assert tx_id
+        for i in range(0, 5):
+            await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+        # Check other managers find for_sale_nfts
+        new_state = [100, 20000]
+        tx_id = await man_0.update_nft(launcher_id, new_state)
+        assert tx_id
+
+        for i in range(0, 5):
+            await full_node_api_0.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+
+        nft = await man_0.view_nft(launcher_id)
+        assert int_from_bytes(nft.state()[0]) == new_state[0]
+        assert int_from_bytes(nft.state()[1]) == new_state[1]
+
+        await man_1.connect()
+        await man_1.nft_wallet.basic_sync()
+        nft = await man_1.view_nft(launcher_id)
+        assert int_from_bytes(nft.state()[0]) == new_state[0]
+        assert int_from_bytes(nft.state()[1]) == new_state[1]
+
+
+
+
+    @pytest.mark.asyncio
+    async def test_buy_spends(self, three_nft_managers):
+        pass
+
     @pytest.mark.asyncio
     async def test_coin_selection(self, three_nft_managers):
         man_0, man_1, man_2, full_node_api_0, full_node_api_1, full_node_api_2 = three_nft_managers
         await man_0.connect()
         await man_1.connect()
         await man_2.connect()
-        amount = 100
+        amount_to_send = int(1e12)
         man_0_balance = await man_0.available_balance()
         assert man_0_balance > 0
         balance = await man_1.available_balance()
@@ -255,7 +325,7 @@ class TestNFTWallet:
         man_1_addr = await man_1.wallet_client.get_next_address(1, False)
         man_0_addr = await man_0.wallet_client.get_next_address(1, False)
 
-        tx = await man_0.wallet_client.send_transaction("1", int(1e12), man_1_addr)
+        tx = await man_0.wallet_client.send_transaction("1", amount_to_send, man_1_addr)
         tx_id = tx.name
 
         async def tx_in_mempool():
@@ -264,9 +334,7 @@ class TestNFTWallet:
 
         await time_out_assert(5, tx_in_mempool, True)
 
-        assert (await man_0.wallet_client.get_wallet_balance("1"))["unconfirmed_wallet_balance"] == man_0_balance - int(
-            1e12
-        )
+        assert (await man_0.wallet_client.get_wallet_balance("1"))["unconfirmed_wallet_balance"] == man_0_balance - int(1e12)
 
         man_0_balance = (await man_0.wallet_client.get_wallet_balance("1"))["confirmed_wallet_balance"]
         print(man_0_balance)
@@ -285,4 +353,27 @@ class TestNFTWallet:
         txns = await man_1.wallet_client.get_transactions("1")
         print(txns)
 
-        assert await man_1.available_balance() == int(1e12)
+        assert await man_1.available_balance() == amount_to_send
+
+        # man_1 now has a balance of coins transferred from man_0, i.e. non-farmed coins
+        # man_1 can test coin selection by launching a coin
+
+        amount = 101
+        nft_data = ("CreatorNFT", "some data")
+        for_sale_launch_state = [100, 1000]
+        not_for_sale_launch_state = [0, 1000]
+        royalty = [10]
+        tx_id, launcher_id = await man_1.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
+        assert tx_id
+        for i in range(0, 5):
+            await full_node_api_1.farm_new_transaction_block(FarmNewBlockProtocol(bytes32(b"a" * 32)))
+
+        launched_nft = await man_1.get_my_nfts()
+        assert launched_nft[0].price() == 1000
+        assert launched_nft[0].is_for_sale()
+
+        
+        
+        
+
+        

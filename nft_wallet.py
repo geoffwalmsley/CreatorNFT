@@ -224,6 +224,11 @@ class NFTWallet:
                 await self.save_nft(nft)
                 return nft
 
+    async def basic_sync(self):
+        all_nfts = await self.node_client.get_coin_records_by_puzzle_hash(LAUNCHER_PUZZLE_HASH)
+        await self.filter_singletons(all_nfts)
+        await self.update_to_current_block()
+
     async def save_launcher(self, launcher_id, pk=b""):
         cursor = await self.db_connection.execute(
             "INSERT OR REPLACE INTO nft_coins (launcher_id, owner_pk) VALUES (?, ?)", (bytes(launcher_id), bytes(pk))
@@ -240,21 +245,17 @@ class NFTWallet:
         await cursor.close()
         await self.db_connection.commit()
 
-    async def get_all_nfts(self):
+    async def get_all_nft_ids(self):
+        await self.update_to_current_block()
         query = "SELECT launcher_id FROM nft_coins"
         cursor = await self.db_connection.execute(query)
         rows = await cursor.fetchall()
         await cursor.close()
-        return rows
+        return list(map(lambda x: x[0], rows))
 
-    async def get_nfts(self, pk: G1Element = None):
-        if pk:
-            query = f"SELECT launcher_id FROM nft_coins WHERE owner_pk = ?"
-            cursor = await self.db_connection.execute(query, (bytes(pk),))
-        else:
-            query = "SELECT launcher_id FROM nft_coins"
-            cursor = await self.db_connection.execute(query)
-
+    async def get_nft_ids_by_pk(self, pk: G1Element = None):
+        query = f"SELECT launcher_id FROM nft_coins WHERE owner_pk = ?"
+        cursor = await self.db_connection.execute(query, (bytes(pk),))
         rows = await cursor.fetchall()
         await cursor.close()
         return list(map(lambda x: x[0], rows))

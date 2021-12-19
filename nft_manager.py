@@ -186,7 +186,7 @@ class NFTManager:
                 print("Waiting for block (30s)")
                 await asyncio.sleep(30)
 
-    async def update_nft(self, nft_id: bytes, new_state):
+    async def update_nft(self, nft_id: bytes, new_state: List) -> bytes:
         nft = await self.nft_wallet.get_nft_by_launcher_id(nft_id)
         addr = await self.wallet_client.get_next_address(1, False)
         puzzle_hash = decode_puzzle_hash(addr)
@@ -198,7 +198,7 @@ class NFTManager:
         sb = await sign_coin_spends(
             [update_spend],
             self.pk_to_sk,
-            self.AGG_SIG_ME_DATA,
+            DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA,
             DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM,
         )
         res = await self.node_client.push_tx(sb)
@@ -206,26 +206,25 @@ class NFTManager:
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
 
-    async def get_my_nfts(self):
-        launcher_ids = await self.nft_wallet.get_all_nfts()
+    async def get_my_nfts(self) -> List[NFT]:
+        launcher_ids = await self.nft_wallet.get_all_nft_ids()
         my_nfts = []
-        for launcher_id in launcher_ids[:10]:
-            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id[0])
+        for launcher_id in launcher_ids:
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
             if nft.owner_pk() == bytes(self.nft_pk):
                 my_nfts.append(nft)
         return my_nfts
 
     async def get_for_sale_nfts(self) -> List[NFT]:
-        await self.nft_wallet.update_to_current_block()
-        launcher_ids = await self.nft_wallet.get_all_nfts()
+        launcher_ids = await self.nft_wallet.get_all_nft_ids()
         for_sale_nfts = []
-        for launcher_id in launcher_ids[:10]:
-            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id[0])
+        for launcher_id in launcher_ids:
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
             if (nft.is_for_sale()) and (nft.owner_pk() != bytes(self.nft_pk)):
                 for_sale_nfts.append(nft)
         return for_sale_nfts
 
-    async def buy_nft(self, launcher_id: bytes, new_state):
+    async def buy_nft(self, launcher_id: bytes, new_state: List) -> bytes:
         await self.nft_wallet.update_to_current_block()
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
         addr = await self.wallet_client.get_next_address(1, False)
@@ -245,7 +244,7 @@ class NFTManager:
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
 
-    async def view_nft(self, launcher_id):
+    async def view_nft(self, launcher_id: bytes) -> NFT:
         nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
         return nft
 
