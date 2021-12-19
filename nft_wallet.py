@@ -150,7 +150,6 @@ class NFTWallet:
         singletons = await self.node_client.get_coin_records_by_puzzle_hash(
             LAUNCHER_PUZZLE_HASH, start_height=current_block, end_height=new_height
         )
-        print(f"Checking {len(singletons)} Singletons")
         await self.filter_singletons(singletons)
 
         while new_height > current_block:
@@ -165,6 +164,7 @@ class NFTWallet:
             new_height = blockchain_state["peak"].height
 
     async def filter_singletons(self, singletons: List):
+        print(f"Updating {len(singletons)} CreatorNFTs")
         for cr in singletons:
             eve_cr = await self.node_client.get_coin_records_by_parent_ids([cr.coin.name()])
             assert len(eve_cr) > 0
@@ -177,7 +177,6 @@ class NFTWallet:
                 _, inner_puzzle = list(args.as_iter())
                 mod, _ = inner_puzzle.uncurry()
                 if mod.get_tree_hash() == INNER_MOD.get_tree_hash():
-                    print("Found CreatorNFT")
                     mod, _ = eve_spend.solution.to_program().uncurry()
                     state = mod.as_python()[-1][0]
                     await self.save_launcher(cr.coin.name(), state[-1])
