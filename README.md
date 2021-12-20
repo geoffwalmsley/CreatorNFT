@@ -17,17 +17,41 @@ There is basic wallet functionality to identify coins marked as for-sale on the 
 
 ### Installation
 
+To set up testnet10, best to follow the instructions for the CAT tutorial at chialisp.com. From there you can just use the venv you use for the protocol_and_cats_rebased branch.
+
+
+
   ```sh
   git clone https://github.com/geoffwalmsley/CreatorNFT.git
   pip install --editable .
   ```
 
+Once that's done you can start the DB and sync the current NFTs with:
+
+	```sh
+	nft init
+	```
+
+
 ### Usage
 
-   ```sh
-   nft launch -d art/bird1.txt -r 10 -p 1200 -a 101
-   ```
 
    ```sh
+   # Launch a new NFT
+   nft launch -d <path-to-data> -r 10 -p 1200 -a 101
+   
+   # List owned NFTs
    nft list
+   
+   # List for-sale NFTS
+   nft list-for-sale
+   
+   # View a specific NFT
+   nft view -n <NFT-ID>
+   
+   # Update an owned nft
+   nft update -n <NFT-ID> -p price --for-sale
+   
+   # Buy NFT
+   nft buy -n <NFT-ID>
    ```
