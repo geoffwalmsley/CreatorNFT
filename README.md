@@ -2,6 +2,8 @@
 
 This is a chialisp NFT in which the creator/minter defines a puzzle hash which will capture a fixed percentage of the value each time the singleton is traded.
 
+There's also a video giving an overview of the functionality and a look at the chialisp, [here](https://drive.google.com/file/d/120Ky-LiDOOwsTEBtSmEKLBTChcrNUQda/view?usp=sharing)
+
 Coins locked with the NFT hold the usual key/value data as well as some simple state:
 * For sale/Not for sale
 * Price
@@ -21,14 +23,14 @@ To set up testnet10, best to follow the instructions for the CAT tutorial at chi
 
 
 
-  ```sh
+  ```
   git clone https://github.com/geoffwalmsley/CreatorNFT.git
   pip install --editable .
   ```
 
-Once that's done you can start the DB and sync the current NFTs with:
+Once that's done, make sure you're in the CreatorNFT directory, and you can start the DB and sync the current NFTs with:
 
-	```sh
+	```
 	nft init
 	```
 
@@ -36,7 +38,7 @@ Once that's done you can start the DB and sync the current NFTs with:
 ### Usage
 
 
-   ```sh
+   ```
    # Launch a new NFT
    nft launch -d <path-to-data> -r 10 -p 1200 -a 101
    
