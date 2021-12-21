@@ -2,7 +2,8 @@
 
 This is a chialisp NFT in which the creator/minter defines a puzzle hash which will capture a fixed percentage of the value each time the singleton is traded.
 
-There's also a video giving an overview of the functionality and a look at the chialisp, [here](https://drive.google.com/file/d/120Ky-LiDOOwsTEBtSmEKLBTChcrNUQda/view?usp=sharing)
+There's also a video giving an overview of the functionality and a look at the chialisp, [here](https://drive.google.com/file/d/120Ky-LiDOOwsTEBtSmEKLBTChcrNUQda/view?usp=sharing) (Note the video quality is better if you download it... for some reason streaming it lowers the resolution making it unreadable)
+
 
 Coins locked with the NFT hold the usual key/value data as well as some simple state:
 * For sale/Not for sale
