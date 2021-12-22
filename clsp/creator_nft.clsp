@@ -23,12 +23,18 @@
 					  (sha256 1 MOD_HASH))
      )
 
+     (defun make_even (amt)
+         (if (r (divmod amt 2))
+	     (- amt 1)
+	     amt))
+
      (defun-inline creator_amt (STATE ROYALTY)
      	 (if (f (r ROYALTY))
 	     (f (divmod (* (f (r STATE)) (f (r ROYALTY))) 100))
-	     (q . 0)
+	     0
 	 )
      )
+
 
 
      ;; UPDATE STATE
@@ -65,13 +71,13 @@
 
 	       (list CREATE_COIN			;; Payout current owner
 	             (f (r (r STATE)))
-		     (- (f (r STATE))
+		     (make_even (- (f (r STATE))
 		     	(creator_amt STATE
-			             ROYALTY)))
+			             ROYALTY))))
 
 	       (list CREATE_COIN			;; Payout Creator
 	             (f ROYALTY)
-		     (creator_amt STATE ROYALTY))
+		     (make_even (creator_amt STATE ROYALTY)))
 
 
 	       (list CREATE_PUZZLE_ANNOUNCEMENT		;; Announce the p2 coin id

@@ -739,3 +739,35 @@ class TestCreatorNft:
         new_state = [10, 387350000, carol.puzzle_hash, carol.pk_]
         res, nft_spend = await buy(carol, nft, new_state)
         assert res["additions"]
+
+
+
+    @pytest.mark.asyncio
+    async def test_divmod(self, node, alice, bob):
+        amount = 101
+        rlty = 25
+        start_price = 23622343
+        #start_price = 2000
+        current_state = [10, start_price, alice.puzzle_hash, alice.pk_]
+        royalty = [alice.puzzle_hash, rlty]
+        args = [INNER_MOD.get_tree_hash(), current_state, royalty]
+
+        current_inner_puzzle = INNER_MOD.curry(*args)
+        current_singleton_puzzle = SINGLETON_MOD.curry(
+            (SINGLETON_MOD_HASH, (bytes(b"ok"), LAUNCHER_PUZZLE_HASH)), current_inner_puzzle
+        )
+        lineage_proof = LineageProof(bytes(b"a"*32), bytes(b"b"*32), amount)
+        
+        
+
+#(r (f (r Truths))))
+        truth = Program.to([[], [[101]]])
+        new_state = [0, 20020, bob.puzzle_hash, bob.pk_]
+        inner_sol = [truth, new_state, bytes(b"a"*32)]
+        k = current_inner_puzzle.run(inner_sol)
+
+        inner_solution = [new_state, bytes(b"2")]
+        singleton_solution = singleton_top_layer.solution_for_singleton(lineage_proof, amount, inner_solution)
+        conds = driver.run_singleton(current_singleton_puzzle, singleton_solution)
+        assert conds
+
