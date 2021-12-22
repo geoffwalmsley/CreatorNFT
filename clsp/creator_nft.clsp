@@ -26,14 +26,8 @@
      (defun-inline creator_amt (STATE ROYALTY)
      	 (if (f (r ROYALTY))
 	     (f (divmod (* (f (r STATE)) (f (r ROYALTY))) 100))
-	     (q .0)
+	     (q . 0)
 	 )
-	 ;; (if (f (r ROYALTY))
-	 ;;     (f (divmod (f (r STATE))
-	 ;;                (f (divmod 100
-	 ;; 		           (f (r ROYALTY))))))
-	 ;;     (q . 0)
-	 ;; )
      )
 
 
@@ -95,22 +89,6 @@
 
     ;; ---------------------------------------------------------------------------
     ;; MAIN
-
-    ;; (if payment_info
-    ;; 	(trade_coin MOD_HASH
-    ;;                     STATE
-    ;; 			ROYALTY
-    ;; 		        (my_amount_truth Truths)
-    ;;   		        new_state
-    ;; 		        payment_info
-    ;; 			)
-    ;;     (update_state MOD_HASH
-    ;; 		      STATE
-    ;; 		      ROYALTY
-    ;; 		      (my_amount_truth Truths)
-    ;; 		      new_state
-    ;; 		      ))
-
 
 
     (if payment_info
