@@ -42,19 +42,19 @@ Once that's done, make sure you're in the CreatorNFT directory, and you can star
    ```
    # Launch a new NFT
    nft launch -d <path-to-data> -r 10 -p 1200 -a 101
-   
+
    # List owned NFTs
    nft list
-   
+
    # List for-sale NFTS
    nft list-for-sale
-   
+
    # View a specific NFT
    nft view -n <NFT-ID>
-   
+
    # Update an owned nft
    nft update -n <NFT-ID> -p price --for-sale
-   
+
    # Buy NFT
    nft buy -n <NFT-ID>
    ```
