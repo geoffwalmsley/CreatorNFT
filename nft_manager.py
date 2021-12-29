@@ -27,7 +27,7 @@ from chia.wallet.derive_keys import (
     master_sk_to_wallet_sk,
     master_sk_to_singleton_owner_sk,
 )
-from chia.wallet.derive_keys import master_sk_to_wallet_sk_unhardened
+#from chia.wallet.derive_keys import master_sk_to_wallet_sk_unhardened
 from chia.types.coin_spend import CoinSpend
 from chia.wallet.sign_coin_spends import sign_coin_spends
 from chia.wallet.lineage_proof import LineageProof
@@ -53,9 +53,9 @@ LAUNCHER_PUZZLE = load_clsp_relative("clsp/nft_launcher.clsp")
 LAUNCHER_PUZZLE_HASH = LAUNCHER_PUZZLE.get_tree_hash()
 
 
-config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
-testnet_agg_sig_data = config["network_overrides"]["constants"]["testnet10"]["AGG_SIG_ME_ADDITIONAL_DATA"]
-DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace_str_to_bytes(**{"AGG_SIG_ME_ADDITIONAL_DATA": testnet_agg_sig_data})
+# config = load_config(Path(DEFAULT_ROOT_PATH), "config.yaml")
+# testnet_agg_sig_data = config["network_overrides"]["constants"]["testnet10"]["AGG_SIG_ME_ADDITIONAL_DATA"]
+# DEFAULT_CONSTANTS = DEFAULT_CONSTANTS.replace_str_to_bytes(**{"AGG_SIG_ME_ADDITIONAL_DATA": testnet_agg_sig_data})
 
 
 class NFTManager:
@@ -126,8 +126,8 @@ class NFTManager:
 
     async def derive_unhardened_keys(self, n=10):
         for i in range(n):
-            #_sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i) #  TESTING on main branch
-            _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)  # protocol_and_cats_branch
+            _sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i) #  TESTING on main branch
+            #_sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)  # protocol_and_cats_branch
             synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
             self.key_dict[bytes(_sk.get_g1())] = _sk
             self.key_dict[bytes(synth_sk.get_g1())] = synth_sk
