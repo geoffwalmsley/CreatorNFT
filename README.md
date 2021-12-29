@@ -13,12 +13,36 @@ Coins locked with the NFT hold the usual key/value data as well as some simple s
 * Royalty percentage (immutable)
 * Creator puzzle hash (immutable)
 
-If the puzzle is flagged as for sale, anyone can us the p2_singleton to buy the nft for the price set by the owner. When the transaction is made, the puzzle outputs conditions which pay the royalty percentage to the creator, the remainder to the owner, and recreates the singleton coin with the details of the new owner.
+If the puzzle is flagged as for sale, anyone can buy the nft for the price set by the owner. When the transaction is made, the puzzle outputs conditions which pay the royalty percentage to the creator, the remainder to the owner, and recreates the nft with the details of the new owner.
 
-There is basic wallet functionality to identify coins marked as for-sale on the block chain, and keeping track of owned coins.
+There is basic wallet functionality to identify coins marked as for-sale on the block chain, and keeping track of owned coins. It isn't built to work with offer files, just intended to be a simple way to have something on chain that you can interact with a bit.
 
 
-### Installation
+## Mainnet Installation
+To run the wallet on mainnet, you have to checkout the `setup_for_mainnet` branch. The key derivation for the wallet will work better once the chia `protocol_and_cats_rebased` branch is merged into chia main branch.
+
+```
+git clone https://github.com/geoffwalmsley/CreatorNFT.git
+cd CreatorNFT/
+git checkout setup_for_mainnet
+pip install --editable .
+```
+
+To start the database run:
+
+```
+nft init
+```
+
+To see all the listed NFTs run:
+
+```
+nft list-all
+```
+
+
+
+### Testnet Installation
 
 To set up testnet10, best to follow the instructions for the CAT tutorial at chialisp.com. From there you can just use the venv you use for the protocol_and_cats_rebased branch.
 
@@ -26,6 +50,7 @@ To set up testnet10, best to follow the instructions for the CAT tutorial at chi
 
   ```
   git clone https://github.com/geoffwalmsley/CreatorNFT.git
+  cd CreatorNFT/
   pip install --editable .
   ```
 
@@ -36,7 +61,7 @@ Once that's done, make sure you're in the CreatorNFT directory, and you can star
 	```
 
 
-### Usage
+## Usage
 
 
    ```
@@ -59,7 +84,7 @@ Once that's done, make sure you're in the CreatorNFT directory, and you can star
    nft buy -n <NFT-ID>
    ```
 
-### Testing
+## Testing
 
 For testing make sure to remove references to master_sk_to_wallet_sk_unhardened as its onnly available in the protovol_and_cats_branch. Tests need main branch to run.
 
