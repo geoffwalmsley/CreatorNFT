@@ -104,10 +104,9 @@ async def sale_cmd(ctx) -> None:
 @click.pass_context
 @coro
 async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
-    assert price > 1000
+    assert price > 0
     assert amount % 2 == 1
-    price = round(price, -3)
-
+    
     manager = NFTManager()
     await manager.connect()
     with open(Path(data), "r") as f:
@@ -133,8 +132,7 @@ async def launch_cmd(ctx, data, royalty, amount, price, for_sale) -> None:
 @click.pass_context
 @coro
 async def update_cmd(ctx, nft_id, price, for_sale):
-    assert price > 1000
-    price = round(price, -3)
+    assert price > 0
     manager = NFTManager()
     await manager.connect()
     if for_sale:
@@ -156,8 +154,7 @@ async def update_cmd(ctx, nft_id, price, for_sale):
 @click.pass_context
 @coro
 async def buy_cmd(ctx, nft_id, price, for_sale):
-    assert price > 1000
-    price = round(price, -3)
+    assert price > 0
     manager = NFTManager()
     await manager.connect()
     if for_sale:

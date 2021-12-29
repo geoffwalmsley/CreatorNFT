@@ -339,9 +339,10 @@ class TestNFTWallet:
 
         # MAn_0 launches a for sale nft
         amount = 101
+        price = 2362383
         nft_data = ("CreatorNFT", "some data")
-        for_sale_launch_state = [100, 1000]
-        not_for_sale_launch_state = [0, 1000]
+        for_sale_launch_state = [100, price]
+        not_for_sale_launch_state = [0, price]
         royalty = [10]
         tx_id, launcher_id = await man_0.launch_nft(amount, nft_data, for_sale_launch_state, royalty)
         assert tx_id
@@ -377,8 +378,8 @@ class TestNFTWallet:
         assert not nft.is_for_sale()
 
         # assert balannces
-        assert (await man_0.available_balance()) == man_0_start_bal + 1000
-        assert (await man_1.available_balance()) == man_1_start_bal - 1000
+        assert (await man_0.available_balance()) == man_0_start_bal + price
+        assert (await man_1.available_balance()) == man_1_start_bal - price
 
         # man_1 updates to for-sale
         new_state = [100, 10000]

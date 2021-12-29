@@ -126,7 +126,7 @@ class NFTManager:
 
     async def derive_unhardened_keys(self, n=10):
         for i in range(n):
-            # _sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i) #  TESTING on main branch
+            #_sk = AugSchemeMPL.derive_child_sk_unhardened(self.master_sk, i) #  TESTING on main branch
             _sk = master_sk_to_wallet_sk_unhardened(self.master_sk, i)  # protocol_and_cats_branch
             synth_sk = calculate_synthetic_secret_key(_sk, DEFAULT_HIDDEN_PUZZLE_HASH)
             self.key_dict[bytes(_sk.get_g1())] = _sk
