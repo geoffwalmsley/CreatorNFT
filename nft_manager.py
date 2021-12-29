@@ -223,6 +223,14 @@ class NFTManager:
             tx_id = await self.get_tx_from_mempool(sb.name())
             return tx_id
 
+    async def get_all_nfts(self) -> List[NFT]:
+        launcher_ids = await self.nft_wallet.get_all_nft_ids()
+        my_nfts = []
+        for launcher_id in launcher_ids:
+            nft = await self.nft_wallet.get_nft_by_launcher_id(launcher_id)
+            my_nfts.append(nft)
+        return my_nfts
+
     async def get_my_nfts(self) -> List[NFT]:
         launcher_ids = await self.nft_wallet.get_all_nft_ids()
         my_nfts = []

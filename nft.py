@@ -39,7 +39,7 @@ def print_nft(nft: NFT):
 
 @click.group(
     help=f"\n  CreatorNFT v0.1\n",
-    epilog="Try 'nft list' or 'nft sale' to see some NFTs",
+    epilog="Try 'nft list-all' or 'nft list-for-sale' to see some NFTs",
     context_settings=CONTEXT_SETTINGS,
 )
 @click.pass_context
@@ -71,7 +71,7 @@ async def view_cmd(ctx, nft_id):
     await manager.close()
 
 
-@cli.command("list", short_help="Show CreatorNFT version")
+@cli.command("list", short_help="View all your nfts")
 @click.pass_context
 @coro
 async def list_cmd(ctx) -> None:
@@ -82,8 +82,19 @@ async def list_cmd(ctx) -> None:
     for nft in nfts:
         print_nft(nft)
 
+@cli.command("list-all", short_help="Show all nfts")
+@click.pass_context
+@coro
+async def list_cmd(ctx) -> None:
+    manager = NFTManager()
+    await manager.connect()
+    nfts = await manager.get_all_nfts()
+    await manager.close()
+    for nft in nfts:
+        print_nft(nft)
 
-@cli.command("list-for-sale", short_help="Show some NFTs for sale")
+
+@cli.command("list-for-sale", short_help="Show NFTs for sale")
 @click.pass_context
 @coro
 async def sale_cmd(ctx) -> None:
