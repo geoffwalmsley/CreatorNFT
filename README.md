@@ -17,6 +17,8 @@ If the puzzle is flagged as for sale, anyone can buy the nft for the price set b
 
 There is basic wallet functionality to identify coins marked as for-sale on the block chain, and keeping track of owned coins. It isn't built to work with offer files, just intended to be a simple way to have something on chain that you can interact with a bit.
 
+![Screenshot](screenshot.png)
+
 
 ## Mainnet Installation
 To run the wallet on mainnet, you have to checkout the `setup_for_mainnet` branch. The key derivation for the wallet will work better once the chia `protocol_and_cats_rebased` branch is merged into chia main branch.
@@ -86,7 +88,7 @@ Once that's done, make sure you're in the CreatorNFT directory, and you can star
 
 ## Testing
 
-For testing make sure to remove references to master_sk_to_wallet_sk_unhardened as its onnly available in the protovol_and_cats_branch. Tests need main branch to run.
+For testing make sure to remove references to master_sk_to_wallet_sk_unhardened as its only available in the protovol_and_cats_branch. Tests need main branch to run.
 
 
 ```
