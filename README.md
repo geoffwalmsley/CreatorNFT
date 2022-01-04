@@ -39,7 +39,7 @@ nft init
 To see all the listed NFTs run:
 
 ```
-nft list-all
+nft list-for-sale
 ```
 
 
